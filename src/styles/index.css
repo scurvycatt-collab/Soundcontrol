@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Vùng bấm lớn, độ tương phản cao cho sân khấu thiếu sáng */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg font-semibold select-none
+      transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400;
+  }
+  .btn-ctl {
+    @apply btn h-12 min-w-12 px-3 bg-stage-700 hover:bg-stage-600 text-lg;
+  }
+  .field {
+    @apply w-full rounded-md bg-stage-950 border border-stage-600 px-3 py-2 text-sm;
+  }
+}
+
+input[type='range'] {
+  accent-color: #38bdf8;
+}

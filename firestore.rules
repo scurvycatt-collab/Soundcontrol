@@ -1,0 +1,74 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Role nằm trong custom claims, chỉ set được bằng Admin SDK (scripts/set-user-role.mjs).
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
+    function isStaff() {
+      return isSignedIn() && request.auth.token.role in ['admin', 'operator'];
+    }
+
+    function allowedKeys() {
+      return ['id', 'title', 'scene', 'sceneOrder', 'sortOrder', 'category', 'storagePath',
+              'originalFilename', 'mimeType', 'fileSizeBytes', 'durationSeconds',
+              'defaultVolume', 'loopDefault', 'status', 'createdAt', 'updatedAt', 'createdByUid'];
+    }
+
+    function validSound(d, soundId) {
+      return d.keys().hasOnly(allowedKeys())
+        && d.keys().hasAll(allowedKeys())
+        && d.id == soundId
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 120
+        && d.scene is string && d.scene.size() > 0 && d.scene.size() <= 80
+        && d.sceneOrder is int && d.sceneOrder >= 0 && d.sceneOrder <= 100000
+        && d.sortOrder is int && d.sortOrder >= 0 && d.sortOrder <= 100000
+        && d.category in ['BGM', 'SFX']
+        && d.storagePath is string
+        && d.storagePath.matches('sounds/' + soundId + '/[0-9a-f-]{36}\\.(mp3|wav)')
+        && d.originalFilename is string && d.originalFilename.size() <= 255
+        && d.mimeType in ['audio/mpeg', 'audio/wav']
+        && d.fileSizeBytes is int && d.fileSizeBytes > 0 && d.fileSizeBytes <= 104857600
+        && d.durationSeconds is number && d.durationSeconds >= 0 && d.durationSeconds < 86400
+        && d.defaultVolume is number && d.defaultVolume >= 0 && d.defaultVolume <= 1
+        && d.loopDefault is bool
+        && d.status in ['ready', 'deleting', 'error']
+        && d.createdAt is timestamp
+        && d.updatedAt is timestamp
+        && d.createdByUid is string;
+    }
+
+    match /sounds/{soundId} {
+      allow read: if isStaff();
+
+      allow create: if isAdmin()
+        && validSound(request.resource.data, soundId)
+        && request.resource.data.status == 'ready'
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // Các trường định danh/tệp là bất biến sau khi tạo.
+      allow update: if isAdmin()
+        && validSound(request.resource.data, soundId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             ['title', 'scene', 'sceneOrder', 'sortOrder', 'category', 'defaultVolume',
+              'loopDefault', 'status', 'durationSeconds', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time;
+
+      // Chỉ xóa doc sau khi đã chuyển sang 'deleting' (khớp trình tự xóa trong ứng dụng).
+      allow delete: if isAdmin() && resource.data.status == 'deleting';
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
