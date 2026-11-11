@@ -45,7 +45,7 @@ export function SegmentNav({ groups, selected, playingSegments, onSelect }: Prop
             {g.segments.map((s) => {
               const active = selected === s.id;
               const playing = playingSegments.has(s.id);
-              const complete = s.cueTotal > 0 && s.cueDone === s.cueTotal;
+              const has = s.soundCount > 0;
               return (
                 <li key={s.id}>
                   <button
@@ -59,12 +59,12 @@ export function SegmentNav({ groups, selected, playingSegments, onSelect }: Prop
                     <span className="min-w-0 flex-1 truncate">{s.id}</span>
                     {playing && <span title="Đang phát" className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 ring-2 ring-emerald-400/40" />}
                     <span
-                      title={s.cueTotal > 0 ? `${s.cueDone}/${s.cueTotal} cue theo kịch bản đã có file` : 'Không có trong kịch bản'}
+                      title={`${s.soundCount} âm đã nạp trong đoạn này${s.cueTotal > 0 ? ` (kịch bản gợi ý ${s.cueTotal} cue)` : ''}`}
                       className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
-                        active ? 'bg-slate-950/15' : complete ? 'bg-emerald-500/20 text-emerald-300' : s.cueTotal > 0 ? 'bg-red-500/20 text-red-300' : 'bg-stage-600 text-slate-300'
+                        active ? 'bg-slate-950/15' : has ? 'bg-emerald-500/20 text-emerald-300' : 'bg-stage-600 text-slate-400'
                       }`}
                     >
-                      {s.cueTotal > 0 ? `${s.cueDone}/${s.cueTotal}` : s.soundCount}
+                      {s.soundCount}
                     </span>
                   </button>
                 </li>

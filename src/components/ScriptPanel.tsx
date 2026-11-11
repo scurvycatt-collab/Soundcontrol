@@ -19,6 +19,7 @@ export function ScriptPanel({ segmentId, sounds }: Props) {
   const seg = getSegment(segmentId);
   const scene = sceneOfSegment(segmentId);
   if (!seg || !scene) return null;
+  const loaded = sounds.filter((x) => x.scene === segmentId).length;
   const hasDialogue = seg.dialogue.toLowerCase().startsWith('có');
 
   return (
@@ -45,25 +46,28 @@ export function ScriptPanel({ segmentId, sounds }: Props) {
         <Field label="Âm thanh & hiệu ứng (kịch bản)">{seg.soundNote || '—'}</Field>
       </dl>
 
-      {seg.cues.length > 0 && (
-        <div className="mt-3">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Cue cần có trong đoạn này</p>
-          <ul className="mt-1 flex flex-wrap gap-2">
+      <div className="mt-3">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+          Đã nạp trong đoạn này: <span className="text-emerald-300">{loaded}</span> âm
+          {seg.cues.length > 0 && <span className="normal-case font-normal"> · kịch bản gợi ý {seg.cues.length} cue</span>}
+        </p>
+        {seg.cues.length > 0 && (
+          <ul className="mt-1 flex flex-wrap gap-2" aria-label="Cue gợi ý theo kịch bản">
             {seg.cues.map((c) => {
               const found = findSoundForCue(c, seg.id, sounds);
               return (
                 <li
                   key={`${c.category}-${c.name}`}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${found ? 'bg-emerald-500/20 text-emerald-200' : 'bg-red-500/20 text-red-200'}`}
-                  title={found ? `Đã có file: ${found.title}` : 'Chưa có file. Bấm “Add Sounds”, đặt tên giống cue và chọn đúng đoạn.'}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${found ? 'bg-emerald-500/20 text-emerald-200' : 'bg-stage-700 text-slate-300'}`}
+                  title={found ? `Trùng tên với: ${found.title}` : 'Gợi ý từ kịch bản. Tên file của bạn không cần giống.'}
                 >
-                  {found ? '✓' : '✗'} {c.category} · {c.name}
+                  {found ? '✓ ' : ''}{c.category} · {c.name}
                 </li>
               );
             })}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }

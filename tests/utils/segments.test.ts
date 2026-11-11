@@ -33,7 +33,7 @@ describe('so khớp cue / điều hướng', () => {
     expect(groups.map((g) => g.key)).toEqual(['scene-1', 'scene-2', 'scene-3', 'scene-4', 'other']);
     expect(flattenNav(groups)).toHaveLength(18);
     const seg = groups[0].segments.find((s) => s.id === 'Đoạn 1.4')!;
-    expect(seg).toMatchObject({ soundCount: 1, cueTotal: 2, cueDone: 1 });
+    expect(seg).toMatchObject({ soundCount: 1, cueTotal: 2, cueDone: 1 }); // cueDone chỉ là gợi ý theo tên
   });
 });
 
