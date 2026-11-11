@@ -12,6 +12,32 @@ interface HowlerInternals {
 
 const internals = (): HowlerInternals => Howler as unknown as HowlerInternals;
 
+interface HowlInternal {
+  _rate: number;
+  _sounds: { _id: number; _sprite: string }[];
+  _sprite: Record<string, unknown>;
+  rate(r: number, id?: number): unknown;
+}
+
+/**
+ * Howler 2.2: howl.rate(r) KHÔNG id sẽ ném lỗi khi howl dùng sprite tùy chỉnh và có sound chưa từng phát
+ * (sound đó mang tên sprite '__default' không tồn tại). Ta tự đặt rate cho các lần phát sau (`_rate`) và chỉ
+ * áp dụng ngay cho các sound đã gắn đúng sprite.
+ */
+function wrapHowl(howl: Howl): HowlLike {
+  const h = howl as unknown as HowlInternal;
+  const wrapped = howl as unknown as HowlLike;
+  const original = h.rate.bind(howl); // phải giữ bản gốc: wrapper ghi đè chính howl.rate
+  wrapped.rate = (r: number) => {
+    h._rate = r;
+    for (const snd of h._sounds) {
+      if (snd._sprite in h._sprite) original(r, snd._id);
+    }
+    return wrapped;
+  };
+  return wrapped;
+}
+
 /** Cầu nối engine ↔ howler.js (Web Audio API ưu tiên, html5: false). */
 export function createHowlerDeps(): EngineDeps {
   // Không tự suspend AudioContext khi rảnh: tránh độ trễ resume ngay lúc cue được bấm.
@@ -26,6 +52,8 @@ export function createHowlerDeps(): EngineDeps {
         preload: true,
         volume: o.volume,
         loop: o.loop,
+        rate: o.rate,
+        ...(o.sprite ? { sprite: { [o.sprite.name]: [o.sprite.startMs, o.sprite.lengthMs, false] as [number, number, boolean] } } : {}),
         onload: () => o.onload(),
         onloaderror: (id, err) => o.onloaderror(id, err),
         onplay: (id) => o.onplay(id),
@@ -34,7 +62,7 @@ export function createHowlerDeps(): EngineDeps {
         onend: (id) => o.onend(id),
         onplayerror: (id, err) => o.onplayerror(id, err),
       });
-      return howl as unknown as HowlLike;
+      return wrapHowl(howl);
     },
 
     async unlockContext(): Promise<boolean> {

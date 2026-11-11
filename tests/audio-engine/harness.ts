@@ -18,6 +18,13 @@ export class FakeHowl implements HowlLike {
   playCalls = 0;
   stopCalls = 0;
   nextSoundId = 1;
+  rateValue: number;
+  rateCalls = 0;
+  lastPlayArg: number | string | undefined;
+  /** Vị trí bắt đầu (giây, file gốc) của sprite; 0 nếu không cắt. */
+  get startAbs(): number {
+    return this.opts.sprite ? this.opts.sprite.startMs / 1000 : 0;
+  }
   constructor(
     public id: string,
     public opts: HowlFactoryOptions,
@@ -26,8 +33,19 @@ export class FakeHowl implements HowlLike {
   ) {
     this.vol = opts.volume;
     this.looping = opts.loop;
+    this.rateValue = opts.rate;
+    this.position = this.startAbs;
   }
-  play(soundId?: number): number {
+  rate(r: number): this {
+    this.rateCalls++;
+    this.rateValue = r;
+    return this;
+  }
+  play(arg?: number | string): number {
+    const soundId = typeof arg === 'number' ? arg : undefined;
+    this.lastPlayArg = arg;
+    if (this.opts.sprite && arg === undefined) return 0; // giống Howler: howl có sprite mà play() trần thì không phát
+    if (this.position < this.startAbs) this.position = this.startAbs;
     this.playCalls++;
     if (this.behaviour.failPlay) {
       this.opts.onplayerror(soundId ?? 0, 'blocked');
@@ -52,7 +70,7 @@ export class FakeHowl implements HowlLike {
     const wasActive = this.playing || this.paused;
     this.playing = false;
     this.paused = false;
-    this.position = 0;
+    this.position = this.startAbs;
     if (wasActive) this.opts.onstop(1);
     return this;
   }
@@ -83,12 +101,12 @@ export class FakeHowl implements HowlLike {
   finish(): void {
     if (!this.playing) return;
     if (this.looping) {
-      this.position = 0;
+      this.position = this.startAbs;
       this.opts.onend(1);
       return;
     }
     this.playing = false;
-    this.position = 0;
+    this.position = this.startAbs;
     this.opts.onend(1);
   }
 }
@@ -117,6 +135,9 @@ export const cfg = (id: string, category: 'BGM' | 'SFX', extra: Partial<TrackCon
   durationSeconds: 60,
   defaultVolume: 1,
   loopDefault: false,
+  trimStart: 0,
+  trimEnd: 0,
+  playbackRate: 1,
   ...extra,
 });
 

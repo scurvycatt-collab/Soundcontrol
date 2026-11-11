@@ -13,7 +13,7 @@ interface Props {
 
 export function ConfirmDialog({ title, children, confirmLabel, danger, busy, error, onConfirm, onCancel }: Props) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 pb-4 pt-16" role="dialog" aria-modal="true" aria-label={title}>
       <div className="w-full max-w-md space-y-4 rounded-xl border border-stage-600 bg-stage-800 p-5">
         <h2 className="text-lg font-bold">{title}</h2>
         <div className="text-sm text-slate-300">{children}</div>

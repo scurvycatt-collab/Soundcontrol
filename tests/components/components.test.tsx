@@ -21,10 +21,10 @@ const sound = (over: Partial<SoundDocument> = {}): SoundDocument => ({
   createdAt: ts, updatedAt: ts, createdByUid: 'u', ...over,
 });
 const track = (over: Partial<TrackRuntimeState> = {}): TrackRuntimeState => ({
-  soundId: 's1', playbackStatus: 'ready', seekSeconds: 0, durationSeconds: 90, volume: 1, loop: false, ...over,
+  soundId: 's1', playbackStatus: 'ready', seekSeconds: 0, durationSeconds: 90, volume: 1, loop: false, rate: 1, windowStartSeconds: 0, fileDurationSeconds: 90, ...over,
 });
 const mkActions = (): AudioActions => ({
-  toggle: vi.fn(), stop: vi.fn(), replay: vi.fn(), seek: vi.fn(), setVolume: vi.fn(), setLoop: vi.fn(), retry: vi.fn(),
+  toggle: vi.fn(), stop: vi.fn(), replay: vi.fn(), seek: vi.fn(), setVolume: vi.fn(), setLoop: vi.fn(), setRate: vi.fn(), retry: vi.fn(),
 });
 const renderItem = (t: TrackRuntimeState | undefined, extra: { online?: boolean; admin?: boolean } = {}) => {
   const actions = mkActions();

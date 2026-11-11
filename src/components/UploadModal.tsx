@@ -81,7 +81,7 @@ export function UploadModal({ uid, scenes, defaultScene = '', onClose, onUploade
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Thêm âm thanh">
+    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-black/70 px-4 pb-4 pt-16" role="dialog" aria-modal="true" aria-label="Thêm âm thanh">
       <form onSubmit={onSubmit} className="w-full max-w-lg space-y-3 rounded-xl border border-stage-600 bg-stage-800 p-5">
         <h2 className="text-lg font-bold">Thêm âm thanh</h2>
 

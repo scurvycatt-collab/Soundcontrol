@@ -22,9 +22,22 @@ service cloud.firestore {
               'defaultVolume', 'loopDefault', 'status', 'createdAt', 'updatedAt', 'createdByUid'];
     }
 
+    // Trường tùy chọn: cắt không phá hủy + tốc độ mặc định.
+    function optionalKeys() {
+      return ['trimStart', 'trimEnd', 'playbackRate'];
+    }
+
+    function validOptional(d) {
+      return (!('trimStart' in d) || (d.trimStart is number && d.trimStart >= 0 && d.trimStart < 86400))
+        && (!('trimEnd' in d) || (d.trimEnd is number && d.trimEnd >= 0 && d.trimEnd < 86400))
+        && (!('playbackRate' in d) || (d.playbackRate is number && d.playbackRate >= 0.5 && d.playbackRate <= 2))
+        && (!('trimEnd' in d) || d.trimEnd == 0 || !('trimStart' in d) || d.trimEnd > d.trimStart);
+    }
+
     function validSound(d, soundId) {
-      return d.keys().hasOnly(allowedKeys())
+      return d.keys().hasOnly(allowedKeys().concat(optionalKeys()))
         && d.keys().hasAll(allowedKeys())
+        && validOptional(d)
         && d.id == soundId
         && d.title is string && d.title.size() > 0 && d.title.size() <= 120
         && d.scene is string && d.scene.size() > 0 && d.scene.size() <= 80
@@ -60,7 +73,7 @@ service cloud.firestore {
         && validSound(request.resource.data, soundId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
              ['title', 'scene', 'sceneOrder', 'sortOrder', 'category', 'defaultVolume',
-              'loopDefault', 'status', 'durationSeconds', 'updatedAt'])
+              'loopDefault', 'status', 'durationSeconds', 'trimStart', 'trimEnd', 'playbackRate', 'updatedAt'])
         && request.resource.data.updatedAt == request.time;
 
       // Chỉ xóa doc sau khi đã chuyển sang 'deleting' (khớp trình tự xóa trong ứng dụng).

@@ -19,7 +19,7 @@ function makeWav(seconds: number, freq: number): Blob {
 
 const cfg = (id: string, category: 'BGM' | 'SFX', seconds: number): TrackConfig => ({
   id, category, format: 'wav', storagePath: `x/${id}.wav`, fileSizeBytes: seconds * 44100,
-  durationSeconds: seconds, defaultVolume: 1, loopDefault: false,
+  durationSeconds: seconds, defaultVolume: 1, loopDefault: false, trimStart: 0, trimEnd: 0, playbackRate: 1,
 });
 
 const engine = new AudioEngine(createHowlerDeps(), { tickMs: 50 });
@@ -33,6 +33,6 @@ engine.syncSounds([
   cfg('sfx1', 'SFX', 6), cfg('sfx2', 'SFX', 6), cfg('short', 'SFX', 1),
 ]);
 broken.add('bgmBad');
-Object.assign(window, { engine, snap: () => engine.getSnapshot() });
+Object.assign(window, { engine, snap: () => engine.getSnapshot(), cfgOf: cfg });
 document.getElementById('gesture')!.addEventListener('click', () => void engine.unlock());
 (window as unknown as { ready: boolean }).ready = true;

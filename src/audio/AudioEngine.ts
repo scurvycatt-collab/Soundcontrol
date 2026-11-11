@@ -7,6 +7,7 @@ import {
   PRELOAD_CONCURRENCY,
 } from '../config';
 import { estimateDecodedBytes } from './memory';
+import { clampRate, resolveWindow, type TrimWindow } from '../utils/trim';
 import type { LoadPhase, PlaybackStatus, TrackRuntimeState } from '../types/sound';
 import type {
   BlobProvider,
@@ -36,11 +37,22 @@ interface Entry {
   status: PlaybackStatus;
   phase?: LoadPhase;
   seek: number;
+  /** Độ dài đoạn phát (sau khi cắt), giây "media". */
   duration: number;
+  /** Độ dài toàn bộ file gốc. */
+  fileDuration: number;
+  /** Vùng phát đang áp dụng cho howl hiện tại (theo cấu hình lúc howl được tạo). */
+  win: TrimWindow;
+  /** Chữ ký cắt lúc tạo howl; khác cfg hiện tại ⇒ phải tạo lại howl trước lần phát kế. */
+  howlSig: string;
+  /** Tên sprite khi có cắt; undefined = phát cả file. */
+  sprite?: string;
   volume: number;
   loop: boolean;
+  rate: number;
   volumeTouched: boolean;
   loopTouched: boolean;
+  rateTouched: boolean;
   error?: string;
   loadPromise: Promise<boolean> | null;
   howlSoundId: number | null;
@@ -51,6 +63,8 @@ interface Entry {
 
 const clamp01 = (n: number): number => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+const SPRITE = 'cue';
+const trimSig = (c: TrackConfig): string => `${c.trimStart}|${c.trimEnd}`;
 
 function sameTrack(a: TrackRuntimeState, b: TrackRuntimeState): boolean {
   return (
@@ -60,6 +74,9 @@ function sameTrack(a: TrackRuntimeState, b: TrackRuntimeState): boolean {
     a.durationSeconds === b.durationSeconds &&
     a.volume === b.volume &&
     a.loop === b.loop &&
+    a.rate === b.rate &&
+    a.windowStartSeconds === b.windowStartSeconds &&
+    a.fileDurationSeconds === b.fileDurationSeconds &&
     a.loadPhase === b.loadPhase &&
     a.errorMessage === b.errorMessage
   );
@@ -168,7 +185,15 @@ export class AudioEngine {
         e.loop = cfg.loopDefault;
         e.howl?.loop(e.loop);
       }
-      if (e.duration === 0 && cfg.durationSeconds > 0) e.duration = cfg.durationSeconds;
+      if (!e.rateTouched && !wasActive) {
+        e.rate = clampRate(cfg.playbackRate);
+        e.howl?.rate(e.rate);
+      }
+      if (e.fileDuration === 0 && cfg.durationSeconds > 0) e.fileDuration = cfg.durationSeconds;
+      // Đổi điểm cắt: howl cũ (sprite cũ) không dùng được nữa. Cue đang rảnh thì nhả ngay; cue đang phát giữ nguyên
+      // đến khi dừng, lần phát kế tiếp ensureLoaded sẽ tạo lại howl.
+      if (e.howl && e.howlSig !== trimSig(cfg) && !wasActive && e.status !== 'loading') this.unloadEntry(e);
+      this.refreshWindow(e);
     }
     this.emit();
   }
@@ -287,7 +312,7 @@ export class AudioEngine {
     if (!Number.isFinite(seconds) || !Number.isFinite(duration) || duration <= 0) return false;
     const clamped = Math.min(duration, Math.max(0, seconds));
     try {
-      e.howl.seek(clamped);
+      e.howl.seek(e.win.start + clamped); // howler tính vị trí theo file gốc, kể cả khi dùng sprite
     } catch (err) {
       this.pushNotice('error', `Không tua được: ${errMsg(err)}`);
       return false;
@@ -312,6 +337,20 @@ export class AudioEngine {
     e.loop = loop;
     e.loopTouched = true;
     e.howl?.loop(loop);
+    this.emit();
+  }
+
+  /** Đổi tốc độ tạm thời (như volume): 0.5×–2×, áp dụng ngay cả khi đang phát. Đổi tốc độ cũng đổi cao độ. */
+  setRate(id: string, rate: number): void {
+    const e = this.entries.get(id);
+    if (!e || this.disposed) return;
+    e.rate = clampRate(rate);
+    e.rateTouched = true;
+    try {
+      e.howl?.rate(e.rate);
+    } catch (err) {
+      this.pushNotice('error', `Không đổi được tốc độ: ${errMsg(err)}`);
+    }
     this.emit();
   }
 
@@ -457,11 +496,16 @@ export class AudioEngine {
       loaded: false,
       status: 'idle',
       seek: 0,
-      duration: cfg.durationSeconds,
+      duration: resolveWindow(cfg.trimStart, cfg.trimEnd, cfg.durationSeconds).length || cfg.durationSeconds,
+      fileDuration: cfg.durationSeconds,
+      win: resolveWindow(cfg.trimStart, cfg.trimEnd, cfg.durationSeconds),
+      howlSig: trimSig(cfg),
       volume: clamp01(cfg.defaultVolume),
       loop: cfg.loopDefault,
+      rate: clampRate(cfg.playbackRate),
       volumeTouched: false,
       loopTouched: false,
+      rateTouched: false,
       loadPromise: null,
       howlSoundId: null,
       token: 0,
@@ -596,8 +640,9 @@ export class AudioEngine {
       howl.stop(); // đảm bảo 1 instance/track và reset vị trí
       howl.volume(e.volume);
       howl.loop(e.loop);
+      howl.rate(e.rate);
       e.seek = 0;
-      e.howlSoundId = howl.play();
+      e.howlSoundId = howl.play(e.sprite);
       return true;
     } catch (err) {
       this.failPlayback(e, `Không phát được: ${errMsg(err)}`);
@@ -624,7 +669,7 @@ export class AudioEngine {
     }
     e.token++;
     try {
-      e.howlSoundId = e.howl.play(e.howlSoundId ?? undefined);
+      e.howlSoundId = e.howl.play(e.howlSoundId ?? e.sprite);
     } catch (err) {
       this.failPlayback(e, `Không phát tiếp được: ${errMsg(err)}`);
       return false;
@@ -675,9 +720,9 @@ export class AudioEngine {
     if (this.deps.getContextState() !== 'running') return;
     try {
       prev.howl.stop();
-      prev.howl.seek(r.seek);
+      prev.howl.seek(prev.win.start + r.seek);
       this.activeBgmId = r.id;
-      prev.howlSoundId = prev.howl.play();
+      prev.howlSoundId = prev.howl.play(prev.sprite);
       this.pushNotice('warn', 'BGM mới không phát được — đã khôi phục BGM trước đó.');
     } catch {
       this.activeBgmId = null;
@@ -696,7 +741,11 @@ export class AudioEngine {
   }
 
   private ensureLoaded(e: Entry): Promise<boolean> {
-    if (e.loaded && e.howl) return Promise.resolve(true);
+    if (e.loaded && e.howl) {
+      const stale = e.howlSig !== trimSig(e.cfg);
+      if (!stale || e.status === 'playing' || e.status === 'paused') return Promise.resolve(true);
+      this.unloadEntry(e); // điểm cắt đã đổi: tạo lại howl với sprite mới
+    }
     if (e.loadPromise) return e.loadPromise;
     e.status = 'loading';
     e.phase = 'downloading';
@@ -746,6 +795,8 @@ export class AudioEngine {
     const owner: { howl?: HowlLike } = {};
     const owns = () => Boolean(owner.howl) && e.howl === owner.howl && stillCurrent();
 
+    const sig = trimSig(e.cfg);
+    const win0 = resolveWindow(e.cfg.trimStart, e.cfg.trimEnd, e.fileDuration);
     let howl: HowlLike;
     try {
       howl = this.deps.createHowl({
@@ -753,6 +804,8 @@ export class AudioEngine {
         format: e.cfg.format,
         volume: e.volume,
         loop: e.loop,
+        rate: e.rate,
+        sprite: win0.trimmed ? { name: SPRITE, startMs: Math.round(win0.start * 1000), lengthMs: Math.round(win0.length * 1000) } : undefined,
         onload: () => resolveLoad(),
         onloaderror: (_i, err) => rejectLoad(new Error(String(err ?? 'unknown'))),
         onplay: () => {
@@ -832,17 +885,28 @@ export class AudioEngine {
     e.blobUrl = url;
     e.loaded = true;
     e.phase = undefined;
+    e.howlSig = sig;
+    e.sprite = win0.trimmed ? SPRITE : undefined;
     const d = howl.duration();
-    if (Number.isFinite(d) && d > 0) e.duration = d;
+    if (Number.isFinite(d) && d > 0) e.fileDuration = d;
+    e.win = win0.trimmed ? win0 : resolveWindow(0, 0, e.fileDuration);
+    e.duration = e.win.length || e.fileDuration;
     if (e.status === 'loading') e.status = 'ready';
     this.emit();
     return true;
   }
 
+  /** Cập nhật vùng phát hiển thị khi chưa có howl, hoặc howl còn khớp cấu hình cắt hiện tại. */
+  private refreshWindow(e: Entry): void {
+    if (e.howl && e.howlSig !== trimSig(e.cfg)) return; // howl cũ vẫn đang dùng vùng cũ
+    e.win = resolveWindow(e.cfg.trimStart, e.cfg.trimEnd, e.fileDuration);
+    e.duration = e.win.length || e.fileDuration;
+  }
+
   private readSeek(e: Entry): number {
     try {
       const s = e.howl?.seek();
-      if (typeof s === 'number' && Number.isFinite(s)) return s;
+      if (typeof s === 'number' && Number.isFinite(s)) return Math.min(e.duration, Math.max(0, s - e.win.start));
     } catch {
       /* bỏ qua */
     }
@@ -893,6 +957,9 @@ export class AudioEngine {
       durationSeconds: e.duration,
       volume: e.volume,
       loop: e.loop,
+      rate: e.rate,
+      windowStartSeconds: e.win.start,
+      fileDurationSeconds: e.fileDuration,
       loadPhase: e.status === 'loading' ? e.phase : undefined,
       errorMessage: e.status === 'error' ? e.error : undefined,
     };

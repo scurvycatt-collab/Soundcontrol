@@ -12,6 +12,11 @@ export interface TrackConfig {
   durationSeconds: number;
   defaultVolume: number;
   loopDefault: boolean;
+  /** Cắt không phá hủy (giây trong file gốc). trimEnd = 0: đến hết file. */
+  trimStart: number;
+  trimEnd: number;
+  /** Tốc độ mặc định 0.5–2. */
+  playbackRate: number;
 }
 
 export type EngineState = 'locked' | 'ready' | 'error';
@@ -57,7 +62,8 @@ export interface EngineSnapshot {
 // ---- Trừu tượng hoá Howler để test được bằng mock ----
 
 export interface HowlLike {
-  play(id?: number): number;
+  play(idOrSprite?: number | string): number;
+  rate(r: number): unknown;
   pause(id?: number): unknown;
   stop(id?: number): unknown;
   seek(pos?: number): unknown;
@@ -73,6 +79,9 @@ export interface HowlFactoryOptions {
   format: string;
   volume: number;
   loop: boolean;
+  rate: number;
+  /** Có cắt: howl dựng một sprite duy nhất và luôn phát sprite đó. */
+  sprite?: { name: string; startMs: number; lengthMs: number };
   onload: () => void;
   onloaderror: (id: number | undefined, err: unknown) => void;
   onplay: (id: number) => void;

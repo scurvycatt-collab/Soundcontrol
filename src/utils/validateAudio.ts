@@ -1,3 +1,4 @@
+import { RATE_MAX, RATE_MIN, validateTrim } from './trim';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from '../config';
 import type { SoundCategory } from '../types/sound';
 
@@ -95,6 +96,11 @@ export interface MetadataInput {
   sortOrder: number;
   category: SoundCategory;
   defaultVolume: number;
+  trimStart?: number;
+  trimEnd?: number;
+  playbackRate?: number;
+  /** Độ dài file, để kiểm tra điểm cắt (nếu biết). */
+  fileDuration?: number;
 }
 
 /** Trả về thông báo lỗi đầu tiên hoặc null nếu hợp lệ. Khớp các ràng buộc của Firestore Rules. */
@@ -114,6 +120,13 @@ export function validateMetadata(m: MetadataInput): string | null {
   if (m.category !== 'BGM' && m.category !== 'SFX') return 'Nhóm phải là BGM hoặc SFX.';
   if (!Number.isFinite(m.defaultVolume) || m.defaultVolume < 0 || m.defaultVolume > 1) {
     return 'Âm lượng mặc định phải nằm trong khoảng 0–100%.';
+  }
+  if (m.playbackRate !== undefined && (!Number.isFinite(m.playbackRate) || m.playbackRate < RATE_MIN || m.playbackRate > RATE_MAX)) {
+    return `Tốc độ phải nằm trong khoảng ${RATE_MIN}×–${RATE_MAX}×.`;
+  }
+  if ((m.trimStart ?? 0) > 0 || (m.trimEnd ?? 0) > 0) {
+    const t = validateTrim(m.trimStart ?? 0, m.trimEnd ?? 0, m.fileDuration ?? 0);
+    if (t) return t;
   }
   return null;
 }

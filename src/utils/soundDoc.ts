@@ -1,5 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 import type { SoundCategory, SoundDocument, StoredSoundStatus } from '../types/sound';
+import { RATE_MAX, RATE_MIN } from './trim';
 import type { AudioFormat, TrackConfig } from '../audio/types';
 
 export type ParseResult = { ok: true; value: SoundDocument } | { ok: false; reason: string };
@@ -24,6 +25,10 @@ export function parseSoundDoc(id: string, data: Record<string, unknown>): ParseR
   if (!isNum(data.durationSeconds) || data.durationSeconds < 0) return bad('durationSeconds');
   if (!isNum(data.defaultVolume) || data.defaultVolume < 0 || data.defaultVolume > 1) return bad('defaultVolume');
   if (typeof data.loopDefault !== 'boolean') return bad('loopDefault');
+  const opt = (v: unknown, lo: number, hi: number) => v === undefined || (isNum(v) && v >= lo && v <= hi);
+  if (!opt(data.trimStart, 0, 86400)) return bad('trimStart');
+  if (!opt(data.trimEnd, 0, 86400)) return bad('trimEnd');
+  if (!opt(data.playbackRate, RATE_MIN, RATE_MAX)) return bad('playbackRate');
   if (data.status !== 'ready' && data.status !== 'deleting' && data.status !== 'error') return bad('status');
   if (!isTs(data.createdAt) || !isTs(data.updatedAt)) return bad('timestamps');
   if (!isStr(data.createdByUid)) return bad('createdByUid');
@@ -44,6 +49,9 @@ export function parseSoundDoc(id: string, data: Record<string, unknown>): ParseR
       durationSeconds: data.durationSeconds,
       defaultVolume: data.defaultVolume,
       loopDefault: data.loopDefault,
+      ...(isNum(data.trimStart) && data.trimStart > 0 ? { trimStart: data.trimStart } : {}),
+      ...(isNum(data.trimEnd) && data.trimEnd > 0 ? { trimEnd: data.trimEnd } : {}),
+      ...(isNum(data.playbackRate) && data.playbackRate !== 1 ? { playbackRate: data.playbackRate } : {}),
       status: data.status as StoredSoundStatus,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
@@ -66,6 +74,9 @@ export function toTrackConfig(doc: SoundDocument): TrackConfig {
     durationSeconds: doc.durationSeconds,
     defaultVolume: doc.defaultVolume,
     loopDefault: doc.loopDefault,
+    trimStart: doc.trimStart ?? 0,
+    trimEnd: doc.trimEnd ?? 0,
+    playbackRate: doc.playbackRate ?? 1,
   };
 }
 

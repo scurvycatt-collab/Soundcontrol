@@ -20,6 +20,11 @@ export interface SoundDocument {
   durationSeconds: number;
   defaultVolume: number; // 0..1
   loopDefault: boolean;
+  /** Cắt không phá hủy: chỉ phát từ trimStart đến trimEnd (giây trong file gốc). trimEnd = 0/vắng mặt: đến hết file. */
+  trimStart?: number;
+  trimEnd?: number;
+  /** Tốc độ phát mặc định (0.5–2, mặc định 1). Đổi tốc độ cũng đổi cao độ. */
+  playbackRate?: number;
   status: StoredSoundStatus;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -41,6 +46,9 @@ export interface SoundMetadataPatch {
   category: SoundCategory;
   defaultVolume: number;
   loopDefault: boolean;
+  trimStart: number; // 0 = từ đầu
+  trimEnd: number; // 0 = đến hết
+  playbackRate: number; // 1 = bình thường
 }
 
 export type LoadPhase = 'downloading' | 'decoding';
@@ -52,6 +60,12 @@ export interface TrackRuntimeState {
   durationSeconds: number;
   volume: number; // 0..1, độc lập với master
   loop: boolean;
+  /** Tốc độ đang áp dụng (người vận hành đổi tạm thời được, như volume). */
+  rate: number;
+  /** Vị trí bắt đầu của đoạn cắt trong file gốc (giây). seekSeconds/durationSeconds tính theo đoạn cắt. */
+  windowStartSeconds: number;
+  /** Độ dài toàn bộ file gốc (giây), để vẽ sóng âm. */
+  fileDurationSeconds: number;
   loadPhase?: LoadPhase;
   errorMessage?: string;
 }

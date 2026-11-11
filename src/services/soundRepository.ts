@@ -80,6 +80,9 @@ export async function updateSoundMetadata(id: string, patch: SoundMetadataPatch)
     category: patch.category,
     defaultVolume: patch.defaultVolume,
     loopDefault: patch.loopDefault,
+    trimStart: patch.trimStart,
+    trimEnd: patch.trimEnd,
+    playbackRate: patch.playbackRate,
     updatedAt: serverTimestamp(),
   });
 }

@@ -8,12 +8,17 @@ interface Props {
   position: number; // giây
   canSeek: boolean;
   playing: boolean;
+  /** Đoạn được phát (cắt). Phần ngoài đoạn được làm mờ. Mặc định: cả file. */
+  windowStart?: number;
+  windowEnd?: number;
   height?: number;
   onSeek: (seconds: number) => void;
 }
 
 /** Sóng âm + đầu phát. Bấm hoặc kéo để tua (chỉ khi đang phát/tạm dừng). Bàn phím: ←/→ 1s, Shift 5s. */
-export function Waveform({ label, peaks, duration, position, canSeek, playing, height = 44, onSeek }: Props) {
+export function Waveform({ label, peaks, duration, position, canSeek, playing, windowStart = 0, windowEnd, height = 44, onSeek }: Props) {
+  const winEnd = windowEnd ?? duration;
+  const hasWindow = duration > 0 && (windowStart > 0.001 || winEnd < duration - 0.001);
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [drag, setDrag] = useState<number | null>(null);
@@ -49,15 +54,24 @@ export function Waveform({ label, peaks, duration, position, canSeek, playing, h
         let p = 0;
         for (let k = from; k < to; k++) p = Math.max(p, peaks![k]);
         const h = Math.max(2, (p / 255) * (height - 4));
+        const t = duration > 0 ? ((i + 0.5) / bars) * duration : 0;
+        const outside = hasWindow && (t < windowStart || t > winEnd);
+        g.globalAlpha = outside ? 0.25 : 1;
         g.fillStyle = (i + 0.5) / bars <= ratio ? played : rest;
         g.fillRect(i * bw + 0.5, mid - h / 2, Math.max(1, bw - 1.5), h);
       }
+      g.globalAlpha = 1;
+    }
+    if (hasWindow) {
+      g.fillStyle = 'rgba(251,191,36,0.85)'; // vạch vàng đánh dấu đoạn cắt
+      g.fillRect(Math.max(0, (windowStart / duration) * w - 1), 0, 2, height);
+      g.fillRect(Math.min(w - 2, (winEnd / duration) * w - 1), 0, 2, height);
     }
     if (canSeek || ratio > 0) {
       g.fillStyle = playing ? '#fbbf24' : '#e2e8f0';
       g.fillRect(Math.min(w - 2, Math.max(0, ratio * w - 1)), 0, 2, height);
     }
-  }, [peaks, ratio, height, canSeek, playing]);
+  }, [peaks, ratio, height, canSeek, playing, hasWindow, windowStart, winEnd, duration]);
 
   const toSeconds = (clientX: number) => {
     const r = wrap.current!.getBoundingClientRect();

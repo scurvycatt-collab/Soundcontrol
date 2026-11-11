@@ -1,4 +1,6 @@
 import { getSegment } from '../data/script';
+import { useWaveform } from '../hooks/useWaveform';
+import { TrimEditor } from './TrimEditor';
 import { useState, type FormEvent } from 'react';
 import type { SoundCategory, SoundDocument, SoundMetadataPatch } from '../types/sound';
 import { validateMetadata } from '../utils/validateAudio';
@@ -7,11 +9,15 @@ interface Props {
   sound: SoundDocument;
   /** true nếu sound đang phát/tạm dừng: đổi nhóm sẽ dừng nó. */
   isActive: boolean;
+  /** Độ dài file gốc (giây) nếu engine đã đo được; nếu không dùng durationSeconds của metadata. */
+  fileDuration?: number;
   onSave: (patch: SoundMetadataPatch) => Promise<void>;
   onClose: () => void;
 }
 
-export function EditSoundModal({ sound, isActive, onSave, onClose }: Props) {
+export function EditSoundModal({ sound, isActive, fileDuration: measured, onSave, onClose }: Props) {
+  const fileDuration = measured && measured > 0 ? measured : sound.durationSeconds;
+  const peaks = useWaveform(sound.storagePath);
   const [title, setTitle] = useState(sound.title);
   const [scene, setScene] = useState(sound.scene);
   const [sceneOrder, setSceneOrder] = useState(sound.sceneOrder);
@@ -19,6 +25,9 @@ export function EditSoundModal({ sound, isActive, onSave, onClose }: Props) {
   const [category, setCategory] = useState<SoundCategory>(sound.category);
   const [volumePct, setVolumePct] = useState(Math.round(sound.defaultVolume * 100));
   const [loopDefault, setLoopDefault] = useState(sound.loopDefault);
+  const [trimStart, setTrimStart] = useState(sound.trimStart ?? 0);
+  const [trimEnd, setTrimEnd] = useState(sound.trimEnd && sound.trimEnd > 0 ? Math.min(sound.trimEnd, fileDuration) : fileDuration);
+  const [rate, setRate] = useState(sound.playbackRate ?? 1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,8 +43,12 @@ export function EditSoundModal({ sound, isActive, onSave, onClose }: Props) {
       category,
       defaultVolume: volumePct / 100,
       loopDefault,
+      // Không cắt => lưu 0/0 (đến hết file) để khớp Rules và không giữ số liệu thừa.
+      trimStart: trimStart > 0.001 ? Math.round(trimStart * 1000) / 1000 : 0,
+      trimEnd: trimEnd < fileDuration - 0.001 ? Math.round(trimEnd * 1000) / 1000 : 0,
+      playbackRate: Math.round(rate * 100) / 100,
     };
-    const invalid = validateMetadata(patch);
+    const invalid = validateMetadata({ ...patch, fileDuration });
     if (invalid) {
       setError(invalid);
       return;
@@ -52,8 +65,8 @@ export function EditSoundModal({ sound, isActive, onSave, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Sửa âm thanh">
-      <form onSubmit={submit} className="w-full max-w-lg space-y-3 rounded-xl border border-stage-600 bg-stage-800 p-5">
+    <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-black/70 px-4 pb-4 pt-16" role="dialog" aria-modal="true" aria-label="Sửa âm thanh">
+      <form onSubmit={submit} className="w-full max-w-xl space-y-3 rounded-xl border border-stage-600 bg-stage-800 p-5">
         <h2 className="text-lg font-bold">Sửa metadata</h2>
         <p className="text-xs text-slate-400">Tệp: {sound.originalFilename} (không đổi tệp ở đây)</p>
         <label className="block text-sm">
@@ -98,6 +111,25 @@ export function EditSoundModal({ sound, isActive, onSave, onClose }: Props) {
           <input type="checkbox" checked={loopDefault} onChange={(e) => setLoopDefault(e.target.checked)} />
           Lặp lại mặc định
         </label>
+        {fileDuration > 0 ? (
+          <TrimEditor
+            storagePath={sound.storagePath}
+            fileDuration={fileDuration}
+            peaks={peaks}
+            start={trimStart}
+            end={trimEnd}
+            onChange={(a, b) => {
+              setTrimStart(a);
+              setTrimEnd(b);
+            }}
+            rate={rate}
+            onRate={setRate}
+            previewVolume={volumePct / 100}
+            locked={isActive}
+          />
+        ) : (
+          <p className="text-sm text-slate-400">Chưa biết độ dài file nên chưa thể cắt.</p>
+        )}
         {categoryChanges && (
           <p role="status" className="text-sm text-amber-300">
             Âm thanh này đang phát. Đổi nhóm BGM/SFX sẽ DỪNG nó trước khi lưu.

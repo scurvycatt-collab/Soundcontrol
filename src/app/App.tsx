@@ -141,6 +141,12 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
     return () => clearTimeout(t);
   }, [flash]);
 
+  // STOP ALL: dừng engine + mọi bản nghe thử đang mở (trình chỉnh cắt).
+  const stopAll = useCallback(() => {
+    engine.stopAll();
+    window.dispatchEvent(new Event('stage-stop-all'));
+  }, [engine]);
+
   const actions = useMemo<AudioActions>(
     () => ({
       toggle: (id) => void engine.toggle(id),
@@ -149,6 +155,7 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
       seek: (id, s) => void engine.seek(id, s),
       setVolume: (id, v) => engine.setTrackVolume(id, v),
       setLoop: (id, l) => engine.setLoop(id, l),
+      setRate: (id, r) => engine.setRate(id, r),
       retry: (id) => void engine.retry(id),
     }),
     [engine],
@@ -283,7 +290,7 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
         role={role}
         onUnlock={() => void engine.unlock()}
         onTestSound={() => engine.testSound()}
-        onStopAll={() => engine.stopAll()}
+        onStopAll={stopAll}
         onMasterVolume={(v) => engine.setMasterVolume(v)}
         onMasterMute={(m) => engine.setMasterMute(m)}
         onSignOut={
@@ -390,7 +397,7 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
         />
       )}
       {editing && (
-        <EditSoundModal sound={editing} isActive={isActive(editing.id)} onSave={onSaveEdit} onClose={() => setEditing(null)} />
+        <EditSoundModal sound={editing} isActive={isActive(editing.id)} fileDuration={snapshot.tracks[editing.id]?.fileDurationSeconds} onSave={onSaveEdit} onClose={() => setEditing(null)} />
       )}
       {deleting && (
         <ConfirmDialog
@@ -405,6 +412,17 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
           Xóa “{deleting.title}” khỏi Storage và danh sách. {isActive(deleting.id) && 'Âm thanh đang phát sẽ được DỪNG trước. '}
           Không thể hoàn tác.
         </ConfirmDialog>
+      )}
+      {/* Các hộp thoại phủ lên Header: giữ STOP ALL luôn bấm được. */}
+      {(showUpload || editing || deleting) && (
+        <button
+          type="button"
+          data-testid="stop-all-modal"
+          onClick={stopAll}
+          className="btn fixed top-2 right-2 z-[70] h-12 min-w-32 px-5 text-lg font-black bg-red-600 hover:bg-red-500 active:bg-red-700 text-white ring-2 ring-red-300 shadow-xl"
+        >
+          ■ STOP ALL
+        </button>
       )}
     </div>
   );
