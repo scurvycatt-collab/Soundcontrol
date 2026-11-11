@@ -2,6 +2,7 @@
 // Không dùng Firebase, không có xác thực. Chỉ để dùng thử/trình diễn trên một máy.
 import type { SoundCreateData, SoundDocument, SoundMetadataPatch } from '../types/sound';
 import type { SoundsSnapshot } from '../services/soundRepository';
+import { ALL_SEGMENTS } from '../data/script';
 import { parseSoundDoc, sortSounds } from '../utils/soundDoc';
 
 const DB_NAME = 'stage-audio-demo';
@@ -158,26 +159,33 @@ function tone(seconds: number, notes: number[], opts: { decay?: boolean } = {}):
   return new Blob([buf], { type: 'audio/wav' });
 }
 
+/** Tạo âm mẫu (sóng sin tổng hợp) cho MỌI cue của kịch bản, để thử điều hướng đoạn/BGM/sóng âm. */
 export async function demoSeedSamples(uid = 'demo'): Promise<number> {
-  const samples: { title: string; scene: string; sceneOrder: number; sortOrder: number; category: 'BGM' | 'SFX'; blob: Blob; vol: number; loop: boolean; secs: number }[] = [
-    { title: 'Nhạc mở màn (mẫu)', scene: 'Cảnh 1', sceneOrder: 1, sortOrder: 1, category: 'BGM', blob: tone(30, [261.6, 329.6, 392]), vol: 0.5, loop: true, secs: 30 },
-    { title: 'Nhạc cao trào (mẫu)', scene: 'Cảnh 2', sceneOrder: 2, sortOrder: 1, category: 'BGM', blob: tone(30, [220, 277.2, 329.6]), vol: 0.5, loop: true, secs: 30 },
-    { title: 'Chuông cửa (mẫu)', scene: 'Cảnh 1', sceneOrder: 1, sortOrder: 2, category: 'SFX', blob: tone(2, [880, 1108], { decay: true }), vol: 0.6, loop: false, secs: 2 },
-    { title: 'Tiếng sấm (mẫu)', scene: 'Cảnh 2', sceneOrder: 2, sortOrder: 2, category: 'SFX', blob: tone(4, [60, 90, 120], { decay: true }), vol: 0.8, loop: false, secs: 4 },
-    { title: 'Bíp ngắn (mẫu)', scene: 'Cảnh 2', sceneOrder: 2, sortOrder: 3, category: 'SFX', blob: tone(0.6, [1000], { decay: true }), vol: 0.5, loop: false, secs: 0.6 },
-  ];
-  for (const s of samples) {
-    const id = crypto.randomUUID();
-    const storagePath = `sounds/${id}/${crypto.randomUUID()}.wav`;
-    await demoPutBlob(storagePath, s.blob);
-    await demoCreate(id, {
-      id, title: s.title, scene: s.scene, sceneOrder: s.sceneOrder, sortOrder: s.sortOrder, category: s.category,
-      storagePath, originalFilename: 'sample.wav', mimeType: 'audio/wav', fileSizeBytes: s.blob.size,
-      durationSeconds: s.secs, defaultVolume: s.vol, loopDefault: s.loop, status: 'ready',
-      createdAt: undefined as never, updatedAt: undefined as never, createdByUid: uid,
-    });
+  let n = 0;
+  let k = 0;
+  for (const seg of ALL_SEGMENTS) {
+    let sortOrder = 0;
+    for (const cue of seg.cues) {
+      k++;
+      sortOrder++;
+      const isBgm = cue.category === 'BGM';
+      const base = 180 + ((k * 37) % 360);
+      const notes = isBgm ? [base, base * 1.25, base * 1.5] : [base * 2, base * 2.5];
+      const secs = isBgm ? 10 : 1 + (k % 4) * 0.7;
+      const blob = tone(secs, notes, { decay: !isBgm });
+      const id = crypto.randomUUID();
+      const storagePath = `sounds/${id}/${crypto.randomUUID()}.wav`;
+      await demoPutBlob(storagePath, blob);
+      await demoCreate(id, {
+        id, title: cue.name, scene: seg.id, sceneOrder: seg.order, sortOrder, category: cue.category,
+        storagePath, originalFilename: 'mau.wav', mimeType: 'audio/wav', fileSizeBytes: blob.size,
+        durationSeconds: secs, defaultVolume: isBgm ? 0.5 : 0.7, loopDefault: isBgm, status: 'ready',
+        createdAt: undefined as never, updatedAt: undefined as never, createdByUid: uid,
+      });
+      n++;
+    }
   }
-  return samples.length;
+  return n;
 }
 
 // ---------- Tệp show (.stageshow): sao lưu / chuyển máy ----------

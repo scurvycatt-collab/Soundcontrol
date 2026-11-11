@@ -1,4 +1,6 @@
-import { memo, useState } from 'react';
+import { memo } from 'react';
+import { useWaveform } from '../hooks/useWaveform';
+import { Waveform } from './Waveform';
 import type { PlaybackStatus, SoundDocument, TrackRuntimeState } from '../types/sound';
 import { formatTime } from '../utils/formatTime';
 
@@ -18,6 +20,10 @@ interface Props {
   online: boolean;
   isAdmin: boolean;
   isActiveBgm: boolean;
+  /** Kiểu gọn (BGM cố định trên đầu). */
+  compact?: boolean;
+  /** Thuộc đoạn đang chọn. */
+  inScene?: boolean;
   actions: AudioActions;
   onEdit?: (sound: SoundDocument) => void;
   onDelete?: (sound: SoundDocument) => void;
@@ -43,14 +49,14 @@ const STATUS_STYLE: Record<PlaybackStatus, string> = {
   error: 'bg-red-600 text-white',
 };
 
-function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, actions, onEdit, onDelete }: Props) {
+function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, compact = false, inScene = false, actions, onEdit, onDelete }: Props) {
   const status: PlaybackStatus = track?.playbackStatus ?? 'idle';
   const duration = track?.durationSeconds ?? sound.durationSeconds;
   const seekSeconds = track?.seekSeconds ?? 0;
   const volume = track?.volume ?? sound.defaultVolume;
   const loop = track?.loop ?? sound.loopDefault;
 
-  const [dragValue, setDragValue] = useState<number | null>(null);
+  const peaks = useWaveform(sound.storagePath);
 
   const isLoaded = status === 'ready' || status === 'playing' || status === 'paused' || status === 'ended';
   const offlineBlocked = !online && !isLoaded; // chưa preload mà mất mạng
@@ -59,16 +65,10 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, actions, on
   const canStop = status === 'playing' || status === 'paused' || status === 'loading' || status === 'ended';
   const canReplay = !!track && status !== 'error' && status !== 'loading' && !offlineBlocked;
 
-  const shownSeek = dragValue ?? seekSeconds;
+  const shownSeek = seekSeconds;
   const playing = status === 'playing';
 
-  const commitSeek = () => {
-    if (dragValue !== null) {
-      actions.seek(sound.id, dragValue);
-      setDragValue(null);
-    }
-  };
-
+  const ctl = compact ? 'btn h-9 min-w-9 px-2 text-sm bg-stage-700 hover:bg-stage-600' : 'btn-ctl';
   const statusText =
     status === 'loading'
       ? track?.loadPhase === 'decoding'
@@ -81,8 +81,8 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, actions, on
   return (
     <li
       data-testid={`audio-item-${sound.id}`}
-      className={`rounded-xl border p-4 space-y-3 ${
-        playing ? 'border-sky-400 bg-sky-500/10' : isActiveBgm ? 'border-amber-400/70 bg-stage-800' : 'border-stage-600 bg-stage-800'
+      className={`rounded-xl border ${compact ? 'p-3 space-y-2' : 'p-4 space-y-3'} ${
+        playing ? 'border-sky-400 bg-sky-500/10' : isActiveBgm ? 'border-amber-400/70 bg-stage-800' : inScene ? 'border-amber-300/50 bg-stage-800 ring-1 ring-amber-300/30' : 'border-stage-600 bg-stage-800'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -109,10 +109,10 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, actions, on
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={`flex flex-wrap items-center gap-2`}>
         <button
           type="button"
-          className={`btn h-12 min-w-24 px-4 text-lg ${playing ? 'bg-amber-400 text-slate-950 hover:bg-amber-300' : 'bg-sky-600 hover:bg-sky-500'}`}
+          className={`btn ${compact ? 'h-9 min-w-20 px-3 text-sm' : 'h-12 min-w-24 px-4 text-lg'} ${playing ? 'bg-amber-400 text-slate-950 hover:bg-amber-300' : 'bg-sky-600 hover:bg-sky-500'}`}
           disabled={!canToggle}
           onClick={() => actions.toggle(sound.id)}
           aria-label={playing ? `Tạm dừng ${sound.title}` : `Phát ${sound.title}`}
@@ -121,7 +121,7 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, actions, on
         </button>
         <button
           type="button"
-          className="btn-ctl"
+          className={ctl}
           disabled={!canStop}
           onClick={() => actions.stop(sound.id)}
           aria-label={`Dừng ${sound.title}`}
@@ -130,7 +130,7 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, actions, on
         </button>
         <button
           type="button"
-          className="btn-ctl"
+          className={ctl}
           disabled={!canReplay}
           onClick={() => actions.replay(sound.id)}
           aria-label={`Phát lại ${sound.title}`}
@@ -139,12 +139,12 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, actions, on
         </button>
         <button
           type="button"
-          className={`btn-ctl ${loop ? '!bg-emerald-600 hover:!bg-emerald-500' : ''}`}
+          className={`${ctl} ${loop ? '!bg-emerald-600 hover:!bg-emerald-500' : ''}`}
           aria-pressed={loop}
           onClick={() => actions.setLoop(sound.id, !loop)}
           aria-label={`Lặp ${sound.title}`}
         >
-          ⟲ Loop {loop ? 'On' : 'Off'}
+          ⟲ {compact ? '' : 'Loop '}{loop ? 'On' : 'Off'}
         </button>
         {status === 'error' && (
           <button type="button" className="btn-ctl !bg-red-700 hover:!bg-red-600" onClick={() => actions.retry(sound.id)}>
@@ -161,20 +161,18 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, actions, on
 
       <div className="flex items-center gap-3">
         <span className="w-12 text-right font-mono text-xs tabular-nums text-slate-300">{formatTime(shownSeek)}</span>
-        <input
-          type="range"
-          aria-label={`Vị trí phát ${sound.title}`}
-          className="flex-1 h-8"
-          min={0}
-          max={canSeek ? duration : 1}
-          step={0.05}
-          value={canSeek ? Math.min(shownSeek, duration) : 0}
-          disabled={!canSeek}
-          onChange={(e) => setDragValue(Number(e.target.value))}
-          onPointerUp={commitSeek}
-          onKeyUp={commitSeek}
-          onBlur={commitSeek}
-        />
+        <div className="min-w-0 flex-1">
+          <Waveform
+            label={`Vị trí phát ${sound.title}`}
+            peaks={peaks}
+            duration={canSeek ? duration : Math.max(duration, 0)}
+            position={shownSeek}
+            canSeek={canSeek}
+            playing={playing}
+            height={compact ? 28 : 48}
+            onSeek={(sec) => actions.seek(sound.id, sec)}
+          />
+        </div>
         <span className="w-12 font-mono text-xs tabular-nums text-slate-400">{formatTime(duration)}</span>
       </div>
 

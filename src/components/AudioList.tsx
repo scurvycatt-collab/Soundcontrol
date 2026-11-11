@@ -10,17 +10,21 @@ interface Props {
   online: boolean;
   isAdmin: boolean;
   loading: boolean;
+  compact?: boolean;
+  hideHeading?: boolean;
+  /** Cue thuộc đoạn đang chọn (làm nổi bật trong dock BGM). */
+  highlightScene?: string;
   actions: AudioActions;
   onEdit: (s: SoundDocument) => void;
   onDelete: (s: SoundDocument) => void;
 }
 
 export function AudioList({
-  title, subtitle, sounds, tracks, activeBgmId, online, isAdmin, loading, actions, onEdit, onDelete,
+  title, subtitle, sounds, tracks, activeBgmId, online, isAdmin, loading, compact = false, hideHeading = false, highlightScene = '', actions, onEdit, onDelete,
 }: Props) {
   return (
     <section aria-label={title} className="min-w-0">
-      <div className="mb-3 flex items-baseline justify-between">
+      <div className={`mb-3 flex items-baseline justify-between ${hideHeading ? 'sr-only' : ''}`}>
         <h2 className="text-lg font-bold">
           {title} <span className="ml-1 text-sm font-normal text-slate-400">({sounds.length})</span>
         </h2>
@@ -33,7 +37,7 @@ export function AudioList({
           Chưa có âm thanh nào{isAdmin ? ' — bấm “Add Sounds” để thêm.' : '.'}
         </p>
       ) : (
-        <ul className="space-y-3">
+        <ul className={compact ? 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3' : 'grid gap-3 xl:grid-cols-2'}>
           {sounds.map((s) => (
             <AudioItem
               key={s.id}
@@ -42,6 +46,8 @@ export function AudioList({
               online={online}
               isAdmin={isAdmin}
               isActiveBgm={activeBgmId === s.id}
+              compact={compact}
+              inScene={!!highlightScene && s.scene === highlightScene}
               actions={actions}
               onEdit={onEdit}
               onDelete={onDelete}

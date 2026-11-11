@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthContext, AuthProvider, type AuthContextValue } from '../auth/AuthProvider';
 import { IS_DEMO } from '../config';
+import { ScriptPanel } from '../components/ScriptPanel';
+import { SegmentNav } from '../components/SegmentNav';
+import { buildNavGroups } from '../utils/segments';
 import { DemoTools } from '../components/DemoTools';
 import { demoClearAll, demoSeedSamples } from '../demo/demoStore';
 import { LoginScreen } from '../auth/LoginScreen';
@@ -156,8 +159,22 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
     () => sortSounds(filterSounds(sounds, { query, scene }), sort),
     [sounds, query, scene, sort],
   );
-  const bgm = useMemo(() => visible.filter((s) => s.category === 'BGM'), [visible]);
+  // BGM luôn hiển thị (cố định trên đầu), không bị lọc theo đoạn; đoạn đang chọn được làm nổi bật.
+  const bgm = useMemo(
+    () => sortSounds(filterSounds(sounds, { query, scene: '' }), sort).filter((s) => s.category === 'BGM'),
+    [sounds, query, sort],
+  );
   const sfx = useMemo(() => visible.filter((s) => s.category === 'SFX'), [visible]);
+  const navGroups = useMemo(() => buildNavGroups(sounds), [sounds]);
+  const playingSegments = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of sounds) {
+      const st = snapshot.tracks[s.id]?.playbackStatus;
+      if (st === 'playing' || st === 'paused') set.add(s.scene);
+    }
+    return set;
+  }, [sounds, snapshot.tracks]);
+  const [bgmOpen, setBgmOpen] = useState(true);
 
   const readyCount = useMemo(
     () =>
@@ -174,10 +191,10 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
     [engine, sounds, scene],
   );
   const onUnloadOthers = useCallback(() => {
-    const keep = new Set(visible.map((s) => s.id));
+    const keep = new Set([...visible, ...bgm].map((s) => s.id));
     const n = engine.unloadTracks(sounds.filter((s) => !keep.has(s.id)).map((s) => s.id));
     setFlash(n > 0 ? `Đã giải phóng ${n} cue khỏi bộ nhớ.` : 'Không có cue nào cần giải phóng.');
-  }, [engine, sounds, visible]);
+  }, [engine, sounds, visible, bgm]);
 
   const isActive = (id: string) => {
     const st = snapshot.tracks[id]?.playbackStatus;
@@ -258,6 +275,7 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
 
   return (
     <div className="min-h-screen pb-16">
+      <div className="sticky top-0 z-30 shadow-lg shadow-black/40">
       <Header
         snapshot={snapshot}
         online={online}
@@ -277,6 +295,42 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
               }
         }
       />
+        <div className="border-b border-stage-600 bg-stage-900 px-4 pb-3 pt-2">
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-bold">
+                Background Music (BGM) <span className="ml-1 font-normal text-slate-400">({bgm.length}) · chỉ 1 BGM phát cùng lúc</span>
+              </h2>
+              <button type="button" className="btn h-8 px-3 text-xs bg-stage-700 hover:bg-stage-600" aria-expanded={bgmOpen} onClick={() => setBgmOpen((o) => !o)}>
+                {bgmOpen ? 'Thu gọn' : 'Mở rộng'}
+              </button>
+            </div>
+            {bgmOpen && (
+              <div className="max-h-[30vh] overflow-y-auto pr-1">
+                <AudioList
+                  title="Background Music (BGM)"
+                  subtitle=""
+                  hideHeading
+                  compact
+                  highlightScene={scene}
+                  sounds={bgm}
+                  tracks={snapshot.tracks}
+                  activeBgmId={snapshot.activeBgmId}
+                  online={online}
+                  isAdmin={isAdmin}
+                  loading={loading}
+                  actions={actions}
+                  onEdit={setEditing}
+                  onDelete={(x) => {
+                    setDeleteError(null);
+                    setDeleting(x);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
       <StatusBanner items={banners} />
       {IS_DEMO && <DemoTools onMessage={setFlash} />}
       <Toolbar
@@ -303,45 +357,34 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
         <BrokenSoundsPanel broken={broken} invalid={invalid} onRetryDelete={runDelete} />
       )}
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-4 pt-4 lg:grid-cols-2">
-        <AudioList
-          title="Background Music (BGM)"
-          subtitle="Chỉ 1 BGM phát cùng lúc"
-          sounds={bgm}
-          tracks={snapshot.tracks}
-          activeBgmId={snapshot.activeBgmId}
-          online={online}
-          isAdmin={isAdmin}
-          loading={loading}
-          actions={actions}
-          onEdit={setEditing}
-          onDelete={(s) => {
-            setDeleteError(null);
-            setDeleting(s);
-          }}
-        />
-        <AudioList
-          title="Sound Effects (SFX)"
-          subtitle={`Đang phát: ${snapshot.activeSfxCount}`}
-          sounds={sfx}
-          tracks={snapshot.tracks}
-          activeBgmId={null}
-          online={online}
-          isAdmin={isAdmin}
-          loading={loading}
-          actions={actions}
-          onEdit={setEditing}
-          onDelete={(s) => {
-            setDeleteError(null);
-            setDeleting(s);
-          }}
-        />
+      <main className="mx-auto grid max-w-7xl gap-6 px-4 pt-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <SegmentNav groups={navGroups} selected={scene} playingSegments={playingSegments} onSelect={setScene} />
+        <div className="min-w-0 space-y-4">
+          {scene && <ScriptPanel segmentId={scene} sounds={sounds} />}
+          <AudioList
+            title={scene ? `Sound Effects — ${scene}` : 'Sound Effects (SFX) — tất cả đoạn'}
+            subtitle={`Đang phát: ${snapshot.activeSfxCount}`}
+            sounds={sfx}
+            tracks={snapshot.tracks}
+            activeBgmId={null}
+            online={online}
+            isAdmin={isAdmin}
+            loading={loading}
+            actions={actions}
+            onEdit={setEditing}
+            onDelete={(x) => {
+              setDeleteError(null);
+              setDeleting(x);
+            }}
+          />
+        </div>
       </main>
 
       {showUpload && (
         <UploadModal
           uid={uid}
           scenes={scenes}
+          defaultScene={scene}
           onClose={() => setShowUpload(false)}
           onUploaded={(t) => setFlash(`Đã thêm “${t}”.`)}
         />

@@ -1,3 +1,4 @@
+import { ALL_SEGMENTS, getSegment } from '../data/script';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { MAX_UPLOAD_MB } from '../config';
 import { startUpload, type UploadHandle } from '../services/uploadService';
@@ -8,15 +9,17 @@ import { validateAudioFile } from '../utils/validateAudio';
 interface Props {
   uid: string;
   scenes: string[];
+  /** Đoạn đang chọn ở màn hình chính (điền sẵn). */
+  defaultScene?: string;
   onClose: () => void;
   onUploaded: (title: string) => void;
 }
 
-export function UploadModal({ uid, scenes, onClose, onUploaded }: Props) {
+export function UploadModal({ uid, scenes, defaultScene = '', onClose, onUploaded }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
-  const [scene, setScene] = useState(scenes[0] ?? 'Cảnh 1');
-  const [sceneOrder, setSceneOrder] = useState(1);
+  const [scene, setScene] = useState(defaultScene || scenes[0] || ALL_SEGMENTS[0]?.id || 'Cảnh 1');
+  const [sceneOrder, setSceneOrder] = useState(getSegment(defaultScene || scenes[0] || '')?.order ?? 1);
   const [sortOrder, setSortOrder] = useState(1);
   const [category, setCategory] = useState<SoundCategory>('SFX');
   const [volumePct, setVolumePct] = useState(100);
@@ -26,6 +29,7 @@ export function UploadModal({ uid, scenes, onClose, onUploaded }: Props) {
   const [error, setError] = useState<string | null>(null);
   const handleRef = useRef<UploadHandle | null>(null);
 
+  const segmentOptions = useMemo(() => [...ALL_SEGMENTS.map((x) => x.id), ...scenes.filter((x) => !getSegment(x))], [scenes]);
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => {
     return () => {
@@ -102,15 +106,36 @@ export function UploadModal({ uid, scenes, onClose, onUploaded }: Props) {
 
         <label className="block text-sm">
           Tên âm thanh
-          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required disabled={busy} className="field mt-1" />
+          <input
+            list="cue-options"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              const cue = getSegment(scene)?.cues.find((c) => c.name === e.target.value);
+              if (cue) setCategory(cue.category); // chọn đúng cue của kịch bản thì tự đặt nhóm BGM/SFX
+            }}
+            maxLength={120}
+            required
+            disabled={busy}
+            className="field mt-1"
+          />
+          <datalist id="cue-options">
+            {(getSegment(scene)?.cues ?? []).map((c) => (
+              <option key={c.name} value={c.name} label={c.category} />
+            ))}
+          </datalist>
         </label>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-sm">
             Cảnh kịch
-            <input list="scene-options" value={scene} onChange={(e) => setScene(e.target.value)} maxLength={80} required disabled={busy} className="field mt-1" />
+            <input list="scene-options" value={scene} onChange={(e) => {
+                setScene(e.target.value);
+                const seg = getSegment(e.target.value);
+                if (seg) setSceneOrder(seg.order); // thứ tự đoạn theo kịch bản
+              }} maxLength={80} required disabled={busy} className="field mt-1" />
             <datalist id="scene-options">
-              {scenes.map((s) => (
+              {segmentOptions.map((s) => (
                 <option key={s} value={s} />
               ))}
             </datalist>

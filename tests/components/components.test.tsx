@@ -72,23 +72,26 @@ describe('AudioItem — trạng thái hữu hình & điều khiển', () => {
     expect(a.stop).toHaveBeenCalledWith('s1');
   });
 
-  it('A10: thanh tiến trình bị khóa khi chưa phát; tua chỉ gọi seek khi thả', () => {
+  it('A10: sóng âm bị khóa khi chưa phát; tua bằng bàn phím gọi seek', () => {
     const a = renderItem(track({ playbackStatus: 'ready' }));
-    expect(screen.getByLabelText(/Vị trí phát/)).toBeDisabled();
+    const locked = screen.getByRole('slider', { name: /Vị trí phát/ });
+    expect(locked).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.keyDown(locked, { key: 'ArrowRight' });
+    expect(a.seek).not.toHaveBeenCalled();
     cleanup();
     const b = renderItem(track({ playbackStatus: 'playing', seekSeconds: 10 }));
-    const slider = screen.getByLabelText(/Vị trí phát/);
-    expect(slider).toBeEnabled();
-    fireEvent.change(slider, { target: { value: '22.5' } });
-    expect(b.seek).not.toHaveBeenCalled();
-    fireEvent.pointerUp(slider);
-    expect(b.seek).toHaveBeenCalledWith('s1', 22.5);
-    expect(a.seek).not.toHaveBeenCalled();
+    const slider = screen.getByRole('slider', { name: /Vị trí phát/ });
+    expect(slider).toHaveAttribute('aria-disabled', 'false');
+    expect(slider).toHaveAttribute('aria-valuenow', '10');
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(b.seek).toHaveBeenLastCalledWith('s1', 11);
+    fireEvent.keyDown(slider, { key: 'ArrowLeft', shiftKey: true });
+    expect(b.seek).toHaveBeenLastCalledWith('s1', 5);
   });
 
   it('khóa tua khi duration không hợp lệ', () => {
     renderItem(track({ playbackStatus: 'playing', durationSeconds: 0 }));
-    expect(screen.getByLabelText(/Vị trí phát/)).toBeDisabled();
+    expect(screen.getByRole('slider', { name: /Vị trí phát/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('volume track chuyển 0–100% thành 0–1', () => {

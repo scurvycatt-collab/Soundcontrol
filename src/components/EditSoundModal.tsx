@@ -1,3 +1,4 @@
+import { getSegment } from '../data/script';
 import { useState, type FormEvent } from 'react';
 import type { SoundCategory, SoundDocument, SoundMetadataPatch } from '../types/sound';
 import { validateMetadata } from '../utils/validateAudio';
@@ -62,7 +63,16 @@ export function EditSoundModal({ sound, isActive, onSave, onClose }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-sm">
             Cảnh kịch
-            <input value={scene} onChange={(e) => setScene(e.target.value)} maxLength={80} className="field mt-1" />
+            <input
+              value={scene}
+              onChange={(e) => {
+                setScene(e.target.value);
+                const seg = getSegment(e.target.value);
+                if (seg) setSceneOrder(seg.order);
+              }}
+              maxLength={80}
+              className="field mt-1"
+            />
           </label>
           <label className="block text-sm">
             Nhóm

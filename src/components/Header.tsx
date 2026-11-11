@@ -25,7 +25,7 @@ export function Header({
 }: Props) {
   const { engineState, masterVolume, masterMuted } = snapshot;
   return (
-    <header className="sticky top-0 z-30 border-b border-stage-600 bg-stage-900/95 backdrop-blur px-4 py-3">
+    <header className="border-b border-stage-600 bg-stage-900 px-4 py-3">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="text-lg font-extrabold tracking-tight">🎭 Stage Audio Control</h1>
 
