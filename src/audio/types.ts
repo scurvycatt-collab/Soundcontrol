@@ -17,6 +17,9 @@ export interface TrackConfig {
   trimEnd: number;
   /** Tốc độ mặc định 0.5–2. */
   playbackRate: number;
+  /** Fade in / out (giây thực); 0 = tắt. */
+  fadeIn: number;
+  fadeOut: number;
 }
 
 export type EngineState = 'locked' | 'ready' | 'error';
@@ -43,8 +46,15 @@ export interface PrepareResult {
 }
 
 /** Ảnh chụp bất biến để React đọc qua useSyncExternalStore. */
+/** Tự giảm BGM khi có SFX đang phát. level = hệ số âm lượng BGM khi bị giảm (0.35 = còn 35%). */
+export interface DuckSettings {
+  enabled: boolean;
+  level: number;
+}
+
 export interface EngineSnapshot {
   engineState: EngineState;
+  duck: DuckSettings;
   masterVolume: number;
   masterMuted: boolean;
   tracks: Readonly<Record<string, TrackRuntimeState>>;

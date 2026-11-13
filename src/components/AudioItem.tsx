@@ -63,6 +63,8 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, compact = f
   const winEnd = winStart + duration;
   const trimmed = winStart > 0.001 || (fileDuration > 0 && winEnd < fileDuration - 0.001);
   const defaultRate = sound.playbackRate ?? 1;
+  const fadeIn = sound.fadeIn ?? 0;
+  const fadeOut = sound.fadeOut ?? 0;
   const rateOptions = RATE_PRESETS.some((r) => Math.abs(r - rate) < 0.001) ? [...RATE_PRESETS] : [...RATE_PRESETS, rate].sort((a, b) => a - b);
 
   const peaks = useWaveform(sound.storagePath);
@@ -77,7 +79,7 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, compact = f
   const shownSeek = seekSeconds;
   const playing = status === 'playing';
 
-  const ctl = compact ? 'btn h-9 min-w-9 px-2 text-sm bg-stage-700 hover:bg-stage-600' : 'btn-ctl';
+  const ctl = compact ? 'btn h-9 min-w-9 px-2 text-sm bg-stage-700 hover:bg-stage-600' : 'btn h-10 min-w-10 px-2.5 text-sm bg-stage-700 hover:bg-stage-600';
   const statusText =
     status === 'loading'
       ? track?.loadPhase === 'decoding'
@@ -90,13 +92,13 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, compact = f
   return (
     <li
       data-testid={`audio-item-${sound.id}`}
-      className={`rounded-xl border ${compact ? 'p-3 space-y-2' : 'p-4 space-y-3'} ${
+      className={`rounded-xl border ${compact ? 'p-3 space-y-2' : 'p-3 space-y-2'} ${
         playing ? 'border-sky-400 bg-sky-500/10' : isActiveBgm ? 'border-amber-400/70 bg-stage-800' : inScene ? 'border-amber-300/50 bg-stage-800 ring-1 ring-amber-300/30' : 'border-stage-600 bg-stage-800'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-semibold text-base truncate" title={sound.title}>
+          <h3 className="font-semibold text-sm truncate" title={sound.title}>
             {sound.title}
             {isActiveBgm && (
               <span className="ml-2 align-middle rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-950">
@@ -107,11 +109,16 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, compact = f
           <p className="text-xs text-slate-400 truncate" title={sound.originalFilename}>
             {sound.scene} · {sound.originalFilename}
           </p>
-          {(trimmed || Math.abs(rate - 1) > 0.001) && (
+          {(trimmed || Math.abs(rate - 1) > 0.001 || fadeIn > 0 || fadeOut > 0) && (
             <p className="mt-1 flex flex-wrap gap-1.5 text-[11px] font-semibold">
               {trimmed && (
                 <span className="rounded bg-amber-300/15 px-1.5 py-0.5 text-amber-200" title="Đã cắt: chỉ phát đoạn này của file gốc">
                   ✂ {winStart.toFixed(2)}–{winEnd.toFixed(2)}s
+                </span>
+              )}
+              {(fadeIn > 0 || fadeOut > 0) && (
+                <span className="rounded bg-teal-300/15 px-1.5 py-0.5 text-teal-200" title="Fade in / fade out (giây)">
+                  ◢ {fadeIn > 0 ? `${fadeIn}s` : '—'} · {fadeOut > 0 ? `${fadeOut}s` : '—'} ◣
                 </span>
               )}
               {Math.abs(rate - 1) > 0.001 && (
@@ -135,7 +142,7 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, compact = f
       <div className={`flex flex-wrap items-center gap-2`}>
         <button
           type="button"
-          className={`btn ${compact ? 'h-9 min-w-20 px-3 text-sm' : 'h-12 min-w-24 px-4 text-lg'} ${playing ? 'bg-amber-400 text-slate-950 hover:bg-amber-300' : 'bg-sky-600 hover:bg-sky-500'}`}
+          className={`btn ${compact ? 'h-9 min-w-20 px-3 text-sm' : 'h-10 min-w-20 px-3 text-base'} ${playing ? 'bg-amber-400 text-slate-950 hover:bg-amber-300' : 'bg-sky-600 hover:bg-sky-500'}`}
           disabled={!canToggle}
           onClick={() => actions.toggle(sound.id)}
           aria-label={playing ? `Tạm dừng ${sound.title}` : `Phát ${sound.title}`}
@@ -194,7 +201,7 @@ function AudioItemImpl({ sound, track, online, isAdmin, isActiveBgm, compact = f
             windowEnd={winEnd}
             canSeek={canSeek}
             playing={playing}
-            height={compact ? 28 : 48}
+            height={compact ? 28 : 38}
             onSeek={(abs) => actions.seek(sound.id, Math.min(duration, Math.max(0, abs - winStart)))}
           />
         </div>

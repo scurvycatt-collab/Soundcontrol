@@ -3,6 +3,7 @@ import { useWaveform } from '../hooks/useWaveform';
 import { TrimEditor } from './TrimEditor';
 import { useState, type FormEvent } from 'react';
 import type { SoundCategory, SoundDocument, SoundMetadataPatch } from '../types/sound';
+import { FADE_MAX, clampFade } from '../utils/trim';
 import { validateMetadata } from '../utils/validateAudio';
 
 interface Props {
@@ -28,6 +29,8 @@ export function EditSoundModal({ sound, isActive, fileDuration: measured, onSave
   const [trimStart, setTrimStart] = useState(sound.trimStart ?? 0);
   const [trimEnd, setTrimEnd] = useState(sound.trimEnd && sound.trimEnd > 0 ? Math.min(sound.trimEnd, fileDuration) : fileDuration);
   const [rate, setRate] = useState(sound.playbackRate ?? 1);
+  const [fadeIn, setFadeIn] = useState(sound.fadeIn ?? 0);
+  const [fadeOut, setFadeOut] = useState(sound.fadeOut ?? 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +50,8 @@ export function EditSoundModal({ sound, isActive, fileDuration: measured, onSave
       trimStart: trimStart > 0.001 ? Math.round(trimStart * 1000) / 1000 : 0,
       trimEnd: trimEnd < fileDuration - 0.001 ? Math.round(trimEnd * 1000) / 1000 : 0,
       playbackRate: Math.round(rate * 100) / 100,
+      fadeIn: Math.round(clampFade(fadeIn) * 10) / 10,
+      fadeOut: Math.round(clampFade(fadeOut) * 10) / 10,
     };
     const invalid = validateMetadata({ ...patch, fileDuration });
     if (invalid) {
@@ -111,6 +116,16 @@ export function EditSoundModal({ sound, isActive, fileDuration: measured, onSave
           <input type="checkbox" checked={loopDefault} onChange={(e) => setLoopDefault(e.target.checked)} />
           Lặp lại mặc định
         </label>
+        <fieldset className="rounded-lg border border-stage-600 p-3" data-testid="fade-fields">
+          <legend className="px-1 text-sm font-semibold">Fade (làm mờ vào/ra)</legend>
+          <div className="grid grid-cols-2 gap-3">
+            <FadeField label="Fade in (giây)" value={fadeIn} onChange={setFadeIn} />
+            <FadeField label="Fade out (giây)" value={fadeOut} onChange={setFadeOut} />
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Tính theo thời gian thực, trong đoạn đã cắt. 0 = tắt. Fade out không áp dụng khi bật Loop; fade in chỉ ở vòng đầu.
+          </p>
+        </fieldset>
         {fileDuration > 0 ? (
           <TrimEditor
             storagePath={sound.storagePath}
@@ -146,5 +161,22 @@ export function EditSoundModal({ sound, isActive, fileDuration: measured, onSave
         </div>
       </form>
     </div>
+  );
+}
+
+function FadeField({ label, value, onChange }: { label: string; value: number; onChange(v: number): void }) {
+  return (
+    <label className="block text-sm">
+      {label}
+      <input
+        type="number"
+        min={0}
+        max={FADE_MAX}
+        step={0.1}
+        value={value}
+        onChange={(e) => onChange(clampFade(Number(e.target.value)))}
+        className="field mt-1"
+      />
+    </label>
   );
 }

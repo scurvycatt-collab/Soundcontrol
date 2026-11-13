@@ -11,6 +11,7 @@ import { clampRate, resolveWindow, type TrimWindow } from '../utils/trim';
 import type { LoadPhase, PlaybackStatus, TrackRuntimeState } from '../types/sound';
 import type {
   BlobProvider,
+  DuckSettings,
   EngineDeps,
   EngineOptions,
   EngineSnapshot,
@@ -53,6 +54,8 @@ interface Entry {
   volumeTouched: boolean;
   loopTouched: boolean;
   rateTouched: boolean;
+  /** Đã lặp ít nhất một vòng: không fade-in lại ở các vòng sau. */
+  looped: boolean;
   error?: string;
   loadPromise: Promise<boolean> | null;
   howlSoundId: number | null;
@@ -64,6 +67,11 @@ interface Entry {
 const clamp01 = (n: number): number => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 const SPRITE = 'cue';
+const DEFAULT_DUCK_LEVEL = 0.35;
+const DUCK_ATTACK_MS = 150; // hạ BGM nhanh khi SFX bắt đầu
+const DUCK_RELEASE_MS = 900; // trả BGM chậm rãi
+const DUCK_HOLD_MS = 500; // giữ BGM thấp giữa các SFX liên tiếp, tránh "bơm" âm lượng
+const FX_INTERVAL_MS = 40;
 const trimSig = (c: TrackConfig): string => `${c.trimStart}|${c.trimEnd}`;
 
 function sameTrack(a: TrackRuntimeState, b: TrackRuntimeState): boolean {
@@ -116,6 +124,11 @@ export class AudioEngine {
   private disposed = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private blobProvider: BlobProvider | null = null;
+  private duck: DuckSettings = { enabled: true, level: DEFAULT_DUCK_LEVEL };
+  private duckGain = 1;
+  private duckReleaseAt = 0;
+  private fxTimer: ReturnType<typeof setInterval> | null = null;
+  private lastFx = 0;
 
   constructor(deps: EngineDeps, options: EngineOptions = {}) {
     this.deps = deps;
@@ -179,7 +192,7 @@ export class AudioEngine {
       e.cfg = cfg;
       if (!e.volumeTouched && !wasActive) {
         e.volume = clamp01(cfg.defaultVolume);
-        e.howl?.volume(e.volume);
+        this.applyGain(e);
       }
       if (!e.loopTouched && !wasActive) {
         e.loop = cfg.loopDefault;
@@ -327,7 +340,7 @@ export class AudioEngine {
     if (!e || this.disposed) return;
     e.volume = clamp01(volume);
     e.volumeTouched = true;
-    e.howl?.volume(e.volume);
+    this.applyGain(e);
     this.emit();
   }
 
@@ -352,6 +365,103 @@ export class AudioEngine {
       this.pushNotice('error', `Không đổi được tốc độ: ${errMsg(err)}`);
     }
     this.emit();
+  }
+
+  /** Bật/tắt và chỉnh mức giảm BGM khi SFX phát. */
+  setDuck(next: Partial<DuckSettings>): void {
+    if (this.disposed) return;
+    const enabled = next.enabled ?? this.duck.enabled;
+    const level = next.level === undefined ? this.duck.level : Math.min(1, Math.max(0, Number.isFinite(next.level) ? next.level : DEFAULT_DUCK_LEVEL));
+    if (enabled === this.duck.enabled && level === this.duck.level) return;
+    this.duck = { enabled, level };
+    this.fxStep(0, true); // áp dụng ngay, không chờ nhịp kế
+    this.emit();
+  }
+
+  // ------------------------------------------------------------------ gain: fade + ducking
+
+  /** Hệ số fade (0..1) theo vị trí phát hiện tại. Dựa vào vị trí nên pause/seek/đổi tốc độ vẫn đúng. */
+  private envelope(e: Entry, seekSeconds: number): number {
+    const rate = e.rate > 0 ? e.rate : 1;
+    let g = 1;
+    const fi = e.cfg.fadeIn;
+    const fo = e.cfg.fadeOut;
+    if (fi > 0 && !e.looped) g = Math.min(g, seekSeconds / rate / fi);
+    if (fo > 0 && !e.loop && e.duration > 0) g = Math.min(g, (e.duration - seekSeconds) / rate / fo);
+    return Math.min(1, Math.max(0, g));
+  }
+
+  private applyGain(e: Entry, seekSeconds = e.seek): void {
+    if (!e.howl) return;
+    const duck = e.cfg.category === 'BGM' ? this.duckGain : 1;
+    try {
+      e.howl.volume(clamp01(e.volume * this.envelope(e, seekSeconds) * duck));
+    } catch {
+      /* howl đã bị huỷ */
+    }
+  }
+
+  private sfxPlaying(): boolean {
+    for (const e of this.entries.values()) if (e.cfg.category !== 'BGM' && e.status === 'playing') return true;
+    return false;
+  }
+
+  private bgmActive(): boolean {
+    for (const e of this.entries.values()) if (e.cfg.category === 'BGM' && (e.status === 'playing' || e.status === 'paused')) return true;
+    return false;
+  }
+
+  private duckTarget(now: number): number {
+    if (!this.duck.enabled || !this.bgmActive()) return 1; // không có BGM thì chẳng có gì để hạ
+    return this.sfxPlaying() || now < this.duckReleaseAt ? this.duck.level : 1;
+  }
+
+  /** Có fade đang diễn ra hoặc sắp tới (cách cuối < fo + 0.5s thực). Chỉ khi đó mới cần vòng 40ms. */
+  private hasFades(): boolean {
+    for (const e of this.entries.values()) {
+      if (e.status !== 'playing') continue;
+      const fi = e.cfg.fadeIn;
+      const fo = e.cfg.fadeOut;
+      if (fi <= 0 && (fo <= 0 || e.loop)) continue;
+      const rate = e.rate > 0 ? e.rate : 1;
+      const s = this.readSeek(e);
+      if (fi > 0 && !e.looped && s / rate < fi + 0.1) return true;
+      if (fo > 0 && !e.loop && (e.duration - s) / rate < fo + 0.5) return true;
+    }
+    return false;
+  }
+
+  private needsFx(now: number): boolean {
+    return this.duckGain !== this.duckTarget(now) || (this.bgmActive() && now < this.duckReleaseAt) || this.hasFades();
+  }
+
+  /** Bật vòng lặp 40ms chỉ khi cần (có fade đang chạy hoặc BGM đang được hạ/trả). */
+  private ensureFx(): void {
+    if (this.fxTimer || this.disposed) return;
+    if (!this.needsFx(Date.now())) return;
+    this.lastFx = Date.now();
+    this.fxTimer = setInterval(() => this.fxStep(Date.now() - this.lastFx), FX_INTERVAL_MS);
+  }
+
+  private fxStep(dtMs: number, jump = false): void {
+    if (this.disposed) return;
+    const now = Date.now();
+    this.lastFx = now;
+    const dt = Math.min(Math.max(dtMs, 0), 100);
+    if (!this.bgmActive()) this.duckReleaseAt = 0; // không BGM: không có gì để giữ
+    else if (this.duck.enabled && this.sfxPlaying()) this.duckReleaseAt = now + DUCK_HOLD_MS;
+    const target = this.duckTarget(now);
+    if (jump) this.duckGain = target; // đổi cài đặt: nhảy thẳng tới đích
+    else if (this.duckGain > target) this.duckGain = Math.max(target, this.duckGain - dt / DUCK_ATTACK_MS);
+    else if (this.duckGain < target) this.duckGain = Math.min(target, this.duckGain + dt / DUCK_RELEASE_MS);
+    for (const e of this.entries.values()) {
+      if (e.status !== 'playing' && !(e.cfg.category === 'BGM' && e.status === 'paused')) continue;
+      this.applyGain(e, this.readSeek(e));
+    }
+    if (this.fxTimer && !this.needsFx(now)) {
+      clearInterval(this.fxTimer);
+      this.fxTimer = null;
+    }
   }
 
   setMasterVolume(volume: number): void {
@@ -465,6 +575,8 @@ export class AudioEngine {
     this.bgmSeq++;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.fxTimer) clearInterval(this.fxTimer);
+    this.fxTimer = null;
     for (const e of this.entries.values()) {
       e.token++;
       this.unloadEntry(e);
@@ -506,6 +618,7 @@ export class AudioEngine {
       volumeTouched: false,
       loopTouched: false,
       rateTouched: false,
+      looped: false,
       loadPromise: null,
       howlSoundId: null,
       token: 0,
@@ -638,10 +751,11 @@ export class AudioEngine {
     if (!howl) return false;
     try {
       howl.stop(); // đảm bảo 1 instance/track và reset vị trí
-      howl.volume(e.volume);
+      e.seek = 0;
+      e.looped = false;
+      this.applyGain(e); // fade-in: bắt đầu từ 0, không bị "giật"
       howl.loop(e.loop);
       howl.rate(e.rate);
-      e.seek = 0;
       e.howlSoundId = howl.play(e.sprite);
       return true;
     } catch (err) {
@@ -669,6 +783,7 @@ export class AudioEngine {
     }
     e.token++;
     try {
+      this.applyGain(e);
       e.howlSoundId = e.howl.play(e.howlSoundId ?? e.sprite);
     } catch (err) {
       this.failPlayback(e, `Không phát tiếp được: ${errMsg(err)}`);
@@ -721,6 +836,7 @@ export class AudioEngine {
     try {
       prev.howl.stop();
       prev.howl.seek(prev.win.start + r.seek);
+      this.applyGain(prev);
       this.activeBgmId = r.id;
       prev.howlSoundId = prev.howl.play(prev.sprite);
       this.pushNotice('warn', 'BGM mới không phát được — đã khôi phục BGM trước đó.');
@@ -839,7 +955,11 @@ export class AudioEngine {
           }
         },
         onend: () => {
-          if (!owns() || e.loop) return; // loop: Howler phát lại, giữ nguyên trạng thái playing
+          if (!owns()) return;
+          if (e.loop) {
+            e.looped = true; // loop: Howler phát lại, giữ nguyên trạng thái playing
+            return;
+          }
           e.status = 'ended';
           e.seek = 0;
           this.activeSfx.delete(id);
@@ -941,6 +1061,7 @@ export class AudioEngine {
         changed = true;
       }
     }
+    this.ensureFx(); // đánh thức vòng fx khi sắp tới đoạn fade out
     if (changed) this.emit();
   }
 
@@ -979,6 +1100,7 @@ export class AudioEngine {
       engineState: this.engineState,
       masterVolume: this.masterVolume,
       masterMuted: this.masterMuted,
+      duck: this.duck,
       tracks,
       activeBgmId: this.activeBgmId,
       pendingBgmId: this.pendingBgmId,
@@ -994,6 +1116,7 @@ export class AudioEngine {
   private emit(): void {
     if (this.disposed) return;
     this.snapshot = this.buildSnapshot();
+    this.ensureFx();
     for (const l of [...this.listeners]) l();
   }
 }

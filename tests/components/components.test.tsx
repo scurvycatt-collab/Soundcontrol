@@ -143,7 +143,7 @@ describe('AudioList', () => {
 
 describe('Header — STOP ALL luôn khả dụng', () => {
   const snapshot = (over: Partial<EngineSnapshot> = {}): EngineSnapshot => ({
-    engineState: 'locked', masterVolume: 0.7, masterMuted: false, tracks: {}, activeBgmId: null, pendingBgmId: null,
+    engineState: 'locked', duck: { enabled: true, level: 0.35 }, masterVolume: 0.7, masterMuted: false, tracks: {}, activeBgmId: null, pendingBgmId: null,
     activeSfxCount: 0, anyPlaying: false, loadedBytes: 0, estimatedRamBytes: 0, prepare: { running: false, total: 0, done: 0, failed: 0 }, notice: null, ...over,
   });
   const handlers = () => ({

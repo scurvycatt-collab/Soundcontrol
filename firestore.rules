@@ -24,13 +24,15 @@ service cloud.firestore {
 
     // Trường tùy chọn: cắt không phá hủy + tốc độ mặc định.
     function optionalKeys() {
-      return ['trimStart', 'trimEnd', 'playbackRate'];
+      return ['trimStart', 'trimEnd', 'playbackRate', 'fadeIn', 'fadeOut'];
     }
 
     function validOptional(d) {
       return (!('trimStart' in d) || (d.trimStart is number && d.trimStart >= 0 && d.trimStart < 86400))
         && (!('trimEnd' in d) || (d.trimEnd is number && d.trimEnd >= 0 && d.trimEnd < 86400))
         && (!('playbackRate' in d) || (d.playbackRate is number && d.playbackRate >= 0.5 && d.playbackRate <= 2))
+        && (!('fadeIn' in d) || (d.fadeIn is number && d.fadeIn >= 0 && d.fadeIn <= 10))
+        && (!('fadeOut' in d) || (d.fadeOut is number && d.fadeOut >= 0 && d.fadeOut <= 10))
         && (!('trimEnd' in d) || d.trimEnd == 0 || !('trimStart' in d) || d.trimEnd > d.trimStart);
     }
 
@@ -73,7 +75,7 @@ service cloud.firestore {
         && validSound(request.resource.data, soundId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
              ['title', 'scene', 'sceneOrder', 'sortOrder', 'category', 'defaultVolume',
-              'loopDefault', 'status', 'durationSeconds', 'trimStart', 'trimEnd', 'playbackRate', 'updatedAt'])
+              'loopDefault', 'status', 'durationSeconds', 'trimStart', 'trimEnd', 'playbackRate', 'fadeIn', 'fadeOut', 'updatedAt'])
         && request.resource.data.updatedAt == request.time;
 
       // Chỉ xóa doc sau khi đã chuyển sang 'deleting' (khớp trình tự xóa trong ứng dụng).

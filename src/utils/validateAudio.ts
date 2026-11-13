@@ -1,4 +1,4 @@
-import { RATE_MAX, RATE_MIN, validateTrim } from './trim';
+import { FADE_MAX, RATE_MAX, RATE_MIN, validateTrim } from './trim';
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from '../config';
 import type { SoundCategory } from '../types/sound';
 
@@ -99,6 +99,8 @@ export interface MetadataInput {
   trimStart?: number;
   trimEnd?: number;
   playbackRate?: number;
+  fadeIn?: number;
+  fadeOut?: number;
   /** Độ dài file, để kiểm tra điểm cắt (nếu biết). */
   fileDuration?: number;
 }
@@ -123,6 +125,9 @@ export function validateMetadata(m: MetadataInput): string | null {
   }
   if (m.playbackRate !== undefined && (!Number.isFinite(m.playbackRate) || m.playbackRate < RATE_MIN || m.playbackRate > RATE_MAX)) {
     return `Tốc độ phải nằm trong khoảng ${RATE_MIN}×–${RATE_MAX}×.`;
+  }
+  for (const [k, v] of [['Fade in', m.fadeIn], ['Fade out', m.fadeOut]] as const) {
+    if (v !== undefined && (!Number.isFinite(v) || v < 0 || v > FADE_MAX)) return `${k} phải nằm trong khoảng 0–${FADE_MAX} giây.`;
   }
   if ((m.trimStart ?? 0) > 0 || (m.trimEnd ?? 0) > 0) {
     const t = validateTrim(m.trimStart ?? 0, m.trimEnd ?? 0, m.fileDuration ?? 0);

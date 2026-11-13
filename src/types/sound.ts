@@ -25,6 +25,9 @@ export interface SoundDocument {
   trimEnd?: number;
   /** Tốc độ phát mặc định (0.5–2, mặc định 1). Đổi tốc độ cũng đổi cao độ. */
   playbackRate?: number;
+  /** Fade in / fade out (giây thực, 0/vắng mặt = tắt). */
+  fadeIn?: number;
+  fadeOut?: number;
   status: StoredSoundStatus;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -49,6 +52,8 @@ export interface SoundMetadataPatch {
   trimStart: number; // 0 = từ đầu
   trimEnd: number; // 0 = đến hết
   playbackRate: number; // 1 = bình thường
+  fadeIn: number; // giây, 0 = tắt
+  fadeOut: number;
 }
 
 export type LoadPhase = 'downloading' | 'decoding';

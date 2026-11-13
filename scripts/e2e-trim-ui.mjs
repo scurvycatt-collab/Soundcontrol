@@ -112,6 +112,50 @@ await page.getByText(T).first().waitFor({ timeout: 8000 });
 const afterImport = (await card.innerText());
 check('Nhập tệp show: điểm cắt + ×1.25 còn nguyên', afterImport.includes('✂') && afterImport.includes('×1.25'), afterImport.replace(/\n/g, ' ').slice(0, 120));
 
+
+// 6b) Fade in/out: nhập trong Sửa -> badge -> lưu qua reload và xuất/nhập
+await card.getByRole('button', { name: 'Sửa' }).click();
+const d6 = page.locator('[role=dialog]').first(); await d6.waitFor();
+await d6.getByLabel('Fade in (giây)').fill('0.5');
+await d6.getByLabel('Fade out (giây)').fill('1.2');
+await d6.getByRole('button', { name: 'Save' }).click(); await d6.waitFor({ state: 'detached' });
+check('Badge fade hiện ◢ 0.5s · 1.2s ◣', (await card.innerText()).includes('◢ 0.5s · 1.2s ◣'), (await card.innerText()).replace(/\n/g, ' ').slice(0, 140));
+await page.reload();
+await page.getByText(T).first().waitFor({ timeout: 8000 });
+check('Reload: fade còn nguyên', (await card.innerText()).includes('◢ 0.5s · 1.2s ◣'));
+const [dl2] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Xuất/ }).click()]);
+await dl2.saveAs('/tmp/fade.stageshow');
+page.once('dialog', (d) => d.accept());
+await page.getByRole('button', { name: 'Xóa toàn bộ dữ liệu demo' }).click();
+await page.waitForFunction(() => !document.body.innerText.includes('Sấm sét'), null, { timeout: 8000 });
+await page.locator('input[type=file][accept=".stageshow"]').setInputFiles('/tmp/fade.stageshow');
+await page.getByText(T).first().waitFor({ timeout: 8000 });
+check('Nhập tệp show: fade còn nguyên', (await card.innerText()).includes('◢ 0.5s · 1.2s ◣'));
+// nhập giá trị xấu bị kẹp
+await card.getByRole('button', { name: 'Sửa' }).click();
+const d7 = page.locator('[role=dialog]').first(); await d7.waitFor();
+await d7.getByLabel('Fade in (giây)').fill('99');
+check('Fade in 99 bị kẹp về 10', (await d7.getByLabel('Fade in (giây)').inputValue()) === '10');
+await d7.getByRole('button', { name: /Hủy|Cancel/ }).first().click();
+
+// 6c) Giảm BGM: công tắc + nhớ lại sau reload
+const duck = page.getByTestId('duck-control');
+check('Có công tắc “Giảm BGM khi có SFX” (mặc định bật)', (await duck.getByRole('checkbox').isChecked()) === true);
+await duck.getByRole('checkbox').uncheck();
+await page.reload();
+await page.getByText(T).first().waitFor({ timeout: 8000 });
+check('Tắt giảm BGM được nhớ sau reload', (await page.getByTestId('duck-control').getByRole('checkbox').isChecked()) === false);
+await page.getByTestId('duck-control').getByRole('checkbox').check();
+
+// 6d) Không còn khung tóm tắt đoạn; thẻ SFX nhỏ gọn hơn
+await page.getByRole('button', { name: /Đoạn 1\.1/ }).first().click().catch(() => {});
+await page.waitForTimeout(300);
+const bodyText = await page.locator('body').innerText();
+check('Không còn khung tóm tắt (Nhân vật/Đạo cụ/Đã nạp trong đoạn)', !/NHÂN VẬT|Đã nạp trong đoạn này/i.test(bodyText));
+const h = await page.locator('li[data-testid^=audio-item-]').nth(2).evaluate((el) => el.getBoundingClientRect().height);
+check('Thẻ SFX cao ≤ 190px (trước đây ≈ 230+)', h <= 190, `${Math.round(h)}px`);
+await page.screenshot({ path: '/tmp/ui-after.png' });
+
 // 7) Điện thoại
 await page.setViewportSize({ width: 390, height: 800 });
 await card.getByRole('button', { name: 'Sửa' }).click();

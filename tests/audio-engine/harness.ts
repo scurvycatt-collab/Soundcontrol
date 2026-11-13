@@ -138,6 +138,8 @@ export const cfg = (id: string, category: 'BGM' | 'SFX', extra: Partial<TrackCon
   trimStart: 0,
   trimEnd: 0,
   playbackRate: 1,
+  fadeIn: 0,
+  fadeOut: 0,
   ...extra,
 });
 

@@ -1,6 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 import type { SoundCategory, SoundDocument, StoredSoundStatus } from '../types/sound';
-import { RATE_MAX, RATE_MIN } from './trim';
+import { FADE_MAX, RATE_MAX, RATE_MIN } from './trim';
 import type { AudioFormat, TrackConfig } from '../audio/types';
 
 export type ParseResult = { ok: true; value: SoundDocument } | { ok: false; reason: string };
@@ -29,6 +29,8 @@ export function parseSoundDoc(id: string, data: Record<string, unknown>): ParseR
   if (!opt(data.trimStart, 0, 86400)) return bad('trimStart');
   if (!opt(data.trimEnd, 0, 86400)) return bad('trimEnd');
   if (!opt(data.playbackRate, RATE_MIN, RATE_MAX)) return bad('playbackRate');
+  if (!opt(data.fadeIn, 0, FADE_MAX)) return bad('fadeIn');
+  if (!opt(data.fadeOut, 0, FADE_MAX)) return bad('fadeOut');
   if (data.status !== 'ready' && data.status !== 'deleting' && data.status !== 'error') return bad('status');
   if (!isTs(data.createdAt) || !isTs(data.updatedAt)) return bad('timestamps');
   if (!isStr(data.createdByUid)) return bad('createdByUid');
@@ -52,6 +54,8 @@ export function parseSoundDoc(id: string, data: Record<string, unknown>): ParseR
       ...(isNum(data.trimStart) && data.trimStart > 0 ? { trimStart: data.trimStart } : {}),
       ...(isNum(data.trimEnd) && data.trimEnd > 0 ? { trimEnd: data.trimEnd } : {}),
       ...(isNum(data.playbackRate) && data.playbackRate !== 1 ? { playbackRate: data.playbackRate } : {}),
+      ...(isNum(data.fadeIn) && data.fadeIn > 0 ? { fadeIn: data.fadeIn } : {}),
+      ...(isNum(data.fadeOut) && data.fadeOut > 0 ? { fadeOut: data.fadeOut } : {}),
       status: data.status as StoredSoundStatus,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
@@ -77,6 +81,8 @@ export function toTrackConfig(doc: SoundDocument): TrackConfig {
     trimStart: doc.trimStart ?? 0,
     trimEnd: doc.trimEnd ?? 0,
     playbackRate: doc.playbackRate ?? 1,
+    fadeIn: doc.fadeIn ?? 0,
+    fadeOut: doc.fadeOut ?? 0,
   };
 }
 

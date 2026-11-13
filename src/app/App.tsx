@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthContext, AuthProvider, type AuthContextValue } from '../auth/AuthProvider';
 import { IS_DEMO } from '../config';
-import { ScriptPanel } from '../components/ScriptPanel';
+import { DuckControl } from '../components/DuckControl';
 import { SegmentNav } from '../components/SegmentNav';
 import { buildNavGroups } from '../utils/segments';
 import { DemoTools } from '../components/DemoTools';
@@ -121,6 +121,25 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
   useEffect(() => {
     engine.setBlobProvider((cfg) => fetchSoundBlob(cfg.storagePath));
   }, [engine]);
+  // Cài đặt giảm BGM: nhớ giữa các lần mở (chỉ là tiện lợi, lỗi storage thì dùng mặc định).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('stage-duck');
+      if (raw) {
+        const d = JSON.parse(raw) as { enabled?: unknown; level?: unknown };
+        engine.setDuck({ enabled: d.enabled !== false, ...(typeof d.level === 'number' ? { level: d.level } : {}) });
+      }
+    } catch {
+      /* bỏ qua */
+    }
+  }, [engine]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('stage-duck', JSON.stringify(snapshot.duck));
+    } catch {
+      /* bỏ qua */
+    }
+  }, [snapshot.duck]);
   useEffect(() => {
     engine.syncSounds(sounds.map(toTrackConfig));
   }, [engine, sounds]);
@@ -308,6 +327,7 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
               <h2 className="text-sm font-bold">
                 Background Music (BGM) <span className="ml-1 font-normal text-slate-400">({bgm.length}) · chỉ 1 BGM phát cùng lúc</span>
               </h2>
+              <DuckControl duck={snapshot.duck} onChange={(d) => engine.setDuck(d)} />
               <button type="button" className="btn h-8 px-3 text-xs bg-stage-700 hover:bg-stage-600" aria-expanded={bgmOpen} onClick={() => setBgmOpen((o) => !o)}>
                 {bgmOpen ? 'Thu gọn' : 'Mở rộng'}
               </button>
@@ -367,7 +387,6 @@ function Console({ uid, label, role }: { uid: string; label: string; role: 'admi
       <main className="mx-auto grid max-w-7xl gap-6 px-4 pt-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <SegmentNav groups={navGroups} selected={scene} playingSegments={playingSegments} onSelect={setScene} />
         <div className="min-w-0 space-y-4">
-          {scene && <ScriptPanel segmentId={scene} sounds={sounds} />}
           <AudioList
             title={scene ? `Sound Effects — ${scene}` : 'Sound Effects (SFX) — tất cả đoạn'}
             subtitle={`Đang phát: ${snapshot.activeSfxCount}`}

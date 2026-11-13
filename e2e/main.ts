@@ -19,7 +19,7 @@ function makeWav(seconds: number, freq: number): Blob {
 
 const cfg = (id: string, category: 'BGM' | 'SFX', seconds: number): TrackConfig => ({
   id, category, format: 'wav', storagePath: `x/${id}.wav`, fileSizeBytes: seconds * 44100,
-  durationSeconds: seconds, defaultVolume: 1, loopDefault: false, trimStart: 0, trimEnd: 0, playbackRate: 1,
+  durationSeconds: seconds, defaultVolume: 1, loopDefault: false, trimStart: 0, trimEnd: 0, playbackRate: 1, fadeIn: 0, fadeOut: 0,
 });
 
 const engine = new AudioEngine(createHowlerDeps(), { tickMs: 50 });

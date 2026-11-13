@@ -5,6 +5,9 @@ export const MIN_TRIM_SECONDS = 0.1;
 const EPS = 1e-6;
 export const RATE_MIN = 0.5;
 export const RATE_MAX = 2;
+/** Fade in/out tối đa (giây, theo thời gian thực). 0 = tắt. */
+export const FADE_MAX = 10;
+export const clampFade = (f: number): number => (Number.isFinite(f) ? Math.min(FADE_MAX, Math.max(0, f)) : 0);
 export const RATE_PRESETS = [0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 2] as const;
 
 export const clampRate = (r: number): number => (Number.isFinite(r) ? Math.min(RATE_MAX, Math.max(RATE_MIN, r)) : 1);

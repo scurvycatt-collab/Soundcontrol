@@ -83,6 +83,8 @@ export async function updateSoundMetadata(id: string, patch: SoundMetadataPatch)
     trimStart: patch.trimStart,
     trimEnd: patch.trimEnd,
     playbackRate: patch.playbackRate,
+    fadeIn: patch.fadeIn,
+    fadeOut: patch.fadeOut,
     updatedAt: serverTimestamp(),
   });
 }
